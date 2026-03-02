@@ -16,10 +16,16 @@ export default async function handler(req, res) {
     `- ${p.name} (${p.credentials}, email: ${p.email}, no-call day preference: ${p.no_call_day || "none"}, participation: ${p.participation_percent || 100}%)`
   ).join("\n");
 
-  const requestList = requests.length > 0
-    ? requests.filter(r => r.status === "Approved").map(r =>
-        `- ${r.providers?.name}: ${r.type} from ${r.start_date} to ${r.end_date}`
-      ).join("\n")
+  // Build blocked dates per provider — end date is included, first available is end+1
+  const approvedRequests = requests.filter(r => r.status === "Approved");
+  const requestList = approvedRequests.length > 0
+    ? approvedRequests.map(r => {
+        const endDate = new Date(r.end_date);
+        const nextDay = new Date(endDate);
+        nextDay.setDate(endDate.getDate() + 1);
+        const nextDayStr = `${nextDay.getFullYear()}-${String(nextDay.getMonth()+1).padStart(2,"0")}-${String(nextDay.getDate()).padStart(2,"0")}`;
+        return `- ${r.providers?.name}: ${r.type} from ${r.start_date} to ${r.end_date} (BLOCKED on all these dates inclusive — first available date is ${nextDayStr})`;
+      }).join("\n")
     : "No approved time-off requests.";
 
   const previousCalls = previousSchedule
@@ -46,8 +52,10 @@ The month has ${daysInMonth} days and ${providerCount} providers.
 PROVIDERS:
 ${providerList}
 
-APPROVED TIME-OFF REQUESTS (these dates must be excluded for those providers):
+APPROVED TIME-OFF REQUESTS:
 ${requestList}
+
+IMPORTANT TIME-OFF RULE: A provider on time off from date A to date B is BLOCKED on ALL dates from A through B inclusive. They are NOT available on the last day of their time off. Their first available date is B+1 (the day AFTER their time off ends).
 
 PREVIOUS MONTH CALL HISTORY (use this to ensure fairness continuity):
 ${previousCalls}
@@ -60,15 +68,14 @@ STRICT CALL RULES:
 1. Each day needs exactly one provider on call
 2. Minimum 3 days between any two call shifts for the same provider
 3. FRIDAY and SATURDAY must ALWAYS be different providers
-4. Each provider may have AT MOST ONE Saturday this month — no provider gets two Saturdays in the same month
-5. Distribute Saturdays as evenly as possible — ideally each provider gets at most 1 Saturday per month
+4. Each provider may have AT MOST ONE Saturday this month
+5. Distribute Saturdays as evenly as possible across providers
 6. Distribute Fridays as evenly as possible across providers
-7. Track cumulative Friday and Saturday counts from previous months to ensure year-long fairness
-8. Minimum 3 weeks between weekend shifts (Fri OR Sat) for the same provider
-9. Respect all approved time-off requests
-10. MAXIMIZE the gap between each provider's call shifts
-11. Balance total weekday calls fairly across all providers
-12. Do not assign a provider who had the last call of the previous month to the first day of this month
+7. Minimum 3 weeks between weekend shifts (Fri OR Sat) for the same provider
+8. Respect all approved time-off requests — provider is blocked on ALL days including end date
+9. MAXIMIZE the gap between each provider's call shifts
+10. Balance total weekday calls fairly across all providers
+11. Do not assign a provider who had the last call of the previous month to the first day of this month
 
 CRITICAL: Use ONLY these exact email addresses: ${emailList}
 Do NOT invent or modify any emails.
@@ -113,12 +120,10 @@ Respond ONLY with a valid JSON object, no explanation, no markdown:
       const email = schedule[satDate];
       if (!email) continue;
       if (satCounts[email]) {
-        // This provider already has a Saturday — find someone else
         const usedEmails = Object.values(satCounts);
         const available = providers.map(p => p.email).filter(e => !usedEmails.includes(e));
         if (available.length > 0) {
           schedule[satDate] = available[0];
-          // Also update Sunday
           const satD = parseInt(satDate.split("-")[2]);
           const sunDate = new Date(year, month, satD + 1);
           const sunStr = `${sunDate.getFullYear()}-${String(sunDate.getMonth()+1).padStart(2,"0")}-${String(sunDate.getDate()).padStart(2,"0")}`;
@@ -126,6 +131,22 @@ Respond ONLY with a valid JSON object, no explanation, no markdown:
         }
       } else {
         satCounts[email] = (satCounts[email] || 0) + 1;
+      }
+    }
+
+    // ─── Enforce time-off blocks in code ─────────────────────────────────────
+    for (const r of approvedRequests) {
+      const start = new Date(r.start_date);
+      const end = new Date(r.end_date);
+      const providerEmail = r.providers?.email || providers.find(p => p.id === r.provider_id)?.email;
+      if (!providerEmail) continue;
+      for (let dt = new Date(start); dt <= end; dt.setDate(dt.getDate() + 1)) {
+        const dateStr = `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,"0")}-${String(dt.getDate()).padStart(2,"0")}`;
+        if (schedule[dateStr] === providerEmail) {
+          // Find a replacement — pick any provider not on time off that day
+          const replacement = providers.find(p => p.email !== providerEmail);
+          if (replacement) schedule[dateStr] = replacement.email;
+        }
       }
     }
 
