@@ -129,7 +129,8 @@ export async function saveGeneratedSchedule(scheduleMap, providers) {
     const provider = providers.find(p => p.email === email);
     return { date, provider_id: provider?.id };
   }).filter(r => r.provider_id);
-
+console.log("Schedule map:", scheduleMap);
+console.log("Provider emails:", providers.map(p => p.email));
   console.log("Saving rows:", rows);
 
   if (rows.length === 0) {
