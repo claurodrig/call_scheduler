@@ -147,7 +147,7 @@ export async function saveGeneratedSchedule(scheduleMap, providers, year, month)
     .gte("date", startDate)
     .lte("date", endDate);
 
-  if (deleteError) console.error("Delete error:", deleteError);
+  console.log("Delete result:", deleteError, "from", startDate, "to", endDate);
 
   const { error } = await supabase.from("call_schedule").insert(rows);
   if (error) console.error("saveGeneratedSchedule error:", error);
