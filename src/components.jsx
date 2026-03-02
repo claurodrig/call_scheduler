@@ -391,7 +391,7 @@ function AIScheduleGenerator() {
       const [providers, requests] = await Promise.all([fetchProviders(), fetchRequests()]);
       const previousSchedule = await fetchSchedule(month===0?year-1:year, month===0?11:month-1);
       const result = await generateSchedule({ providers, requests, year, month, previousSchedule });
-      await saveGeneratedSchedule(result.schedule, providers);
+      await saveGeneratedSchedule(result.schedule, providers, year, month);
       setSummary(result.summary);
     } catch(err) {
       setError("Something went wrong. Please try again.");
