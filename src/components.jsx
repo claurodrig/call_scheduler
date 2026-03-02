@@ -489,9 +489,26 @@ export function MessagesPage({ recipient, onBack, currentProvider }) {
   const [txt,setTxt]   = useState("");
   const [msgs,setMsgs] = useState([]);
 
-  useEffect(() => {
+ useEffect(() => {
     if (currentProvider && recipient) {
       fetchMessages(currentProvider.id, recipient.id).then(setMsgs);
+
+      const channel = supabase
+        .channel("messages")
+        .on("postgres_changes", {
+          event: "INSERT",
+          schema: "public",
+          table: "messages",
+        }, payload => {
+          const m = payload.new;
+          const isRelevant =
+            (m.sender_id === currentProvider.id && m.recipient_id === recipient.id) ||
+            (m.sender_id === recipient.id && m.recipient_id === currentProvider.id);
+          if (isRelevant) setMsgs(prev => [...prev, m]);
+        })
+        .subscribe();
+
+      return () => supabase.removeChannel(channel);
     }
   }, [currentProvider, recipient]);
 
