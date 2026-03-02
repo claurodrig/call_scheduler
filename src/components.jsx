@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
-  C, PROVIDERS, CALL_SCHEDULE, MONTHS, WD_SHORT, WD_FULL,
-  ff, ffb, pad, dkey, byId, getDays, getFirst,
+  C, MONTHS, WD_SHORT, WD_FULL,
+  ff, ffb, dkey, getDays, getFirst,
   card, btnS, oBtnS, inpS, lblS, badge
 } from "./data";
+import { fetchSchedule, fetchProviders, fetchRequests, submitRequest, updateRequestStatus, fetchMessages, sendMessage } from "./api";
 
 // ─── SVG Icons ────────────────────────────────────────────────────────────────
 export function IcoHome({color}) {
@@ -118,13 +119,13 @@ export function Header({ onNotif, onSettings, logoSrc }) {
 }
 
 // ─── Next 5 Days Strip ────────────────────────────────────────────────────────
-export function NextStrip() {
+export function NextStrip({ schedule={} }) {
   const base = new Date(2026,9,15);
   const days = Array.from({length:5}, (_,i) => {
     const d = new Date(base);
     d.setDate(base.getDate() + i);
     const k = dkey(d.getFullYear(), d.getMonth(), d.getDate());
-    return { d, p: byId(CALL_SCHEDULE[k]) };
+    return { d, p: schedule[k] };
   });
   return (
     <div style={card({padding:"12px 14px", background:`linear-gradient(135deg,${C.wave}99,#FFF)`, border:`1px solid ${C.wave}`})}>
@@ -146,9 +147,20 @@ export function NextStrip() {
 
 // ─── Home Page ────────────────────────────────────────────────────────────────
 export function HomePage() {
-  const [yr,setYr]   = useState(2026);
-  const [mo,setMo]   = useState(9);
-  const [sel,setSel] = useState(null);
+  const [yr,setYr]             = useState(2026);
+  const [mo,setMo]             = useState(9);
+  const [sel,setSel]           = useState(null);
+  const [schedule,setSchedule] = useState({});
+  const [loading,setLoading]   = useState(true);
+
+  useEffect(() => { loadSchedule(yr, mo); }, [yr, mo]);
+
+  async function loadSchedule(year, month) {
+    setLoading(true);
+    const data = await fetchSchedule(year, month);
+    setSchedule(data);
+    setLoading(false);
+  }
 
   const days  = getDays(yr,mo);
   const first = getFirst(yr,mo);
@@ -157,7 +169,7 @@ export function HomePage() {
   for(let d=1;d<=days;d++) cells.push(d);
 
   const isToday = d => yr===2026 && mo===9 && d===15;
-  const prov    = d => byId(CALL_SCHEDULE[dkey(yr,mo,d)]);
+  const prov    = d => schedule[dkey(yr,mo,d)];
   const prevMo  = () => mo===0  ? (setMo(11), setYr(y=>y-1)) : setMo(m=>m-1);
   const nextMo  = () => mo===11 ? (setMo(0),  setYr(y=>y+1)) : setMo(m=>m+1);
   const selProv = sel ? prov(sel) : null;
@@ -177,25 +189,28 @@ export function HomePage() {
           ))}
         </div>
 
-        <div style={{display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:"2px 0"}}>
-          {cells.map((d,i) => {
-            if(!d) return <div key={i}/>;
-            const p=prov(d), t=isToday(d), s=sel===d;
-            return (
-              <div key={i} onClick={()=>setSel(s?null:d)} style={{
-                display:"flex", flexDirection:"column", alignItems:"center",
-                padding:"5px 2px", borderRadius:6, cursor:"pointer",
-                background: s?`${C.teal}15` : t?C.wave : "transparent"
-              }}>
-                <span style={{fontFamily:ff, fontWeight:t||s?900:400, fontSize:13, color:t?C.teal:s?C.primary:C.text}}>{d}</span>
-                {p
-                  ? <div style={{width:6, height:6, borderRadius:"50%", background:p.color, marginTop:2}}/>
-                  : <div style={{width:6, height:6, marginTop:2}}/>
-                }
-              </div>
-            );
-          })}
-        </div>
+        {loading
+          ? <div style={{textAlign:"center", padding:"20px", color:C.sub, fontFamily:ff, fontSize:13}}>Loading schedule...</div>
+          : <div style={{display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:"2px 0"}}>
+              {cells.map((d,i) => {
+                if(!d) return <div key={i}/>;
+                const p=prov(d), t=isToday(d), s=sel===d;
+                return (
+                  <div key={i} onClick={()=>setSel(s?null:d)} style={{
+                    display:"flex", flexDirection:"column", alignItems:"center",
+                    padding:"5px 2px", borderRadius:6, cursor:"pointer",
+                    background: s?`${C.teal}15` : t?C.wave : "transparent"
+                  }}>
+                    <span style={{fontFamily:ff, fontWeight:t||s?900:400, fontSize:13, color:t?C.teal:s?C.primary:C.text}}>{d}</span>
+                    {p
+                      ? <div style={{width:6, height:6, borderRadius:"50%", background:p.color, marginTop:2}}/>
+                      : <div style={{width:6, height:6, marginTop:2}}/>
+                    }
+                  </div>
+                );
+              })}
+            </div>
+        }
 
         {sel && (
           <div style={{marginTop:12, paddingTop:12, borderTop:`1px solid ${C.grey}`, display:"flex", alignItems:"center", gap:12}}>
@@ -206,7 +221,7 @@ export function HomePage() {
               ? <>
                   <Avatar p={selProv} size={40} ring/>
                   <div style={{flex:1}}>
-                    <p style={{margin:0, fontFamily:ff, fontWeight:800, fontSize:13, color:C.text}}>{selProv.name}, {selProv.cred}</p>
+                    <p style={{margin:0, fontFamily:ff, fontWeight:800, fontSize:13, color:C.text}}>{selProv.name}, {selProv.credentials}</p>
                     <p style={{margin:"2px 0 0", fontFamily:ffb, fontSize:11, color:C.sub}}>On call 7AM → 7AM next day</p>
                   </div>
                 </>
@@ -216,7 +231,7 @@ export function HomePage() {
         )}
       </div>
 
-      <NextStrip/>
+      <NextStrip schedule={schedule}/>
       <button style={btnS({marginTop:14})}>Sync to Calendar</button>
     </div>
   );
@@ -224,18 +239,24 @@ export function HomePage() {
 
 // ─── Providers Page ───────────────────────────────────────────────────────────
 export function ProvidersPage({ onMessage }) {
-  const [open,setOpen] = useState(null);
+  const [providers, setProviders] = useState([]);
+  const [open, setOpen]           = useState(null);
+
+  useEffect(() => {
+    fetchProviders().then(setProviders);
+  }, []);
+
   return (
     <div style={{paddingBottom:20}}>
       <p style={{fontFamily:ff, fontWeight:900, fontSize:16, color:C.text, marginBottom:12}}>Provider Directory</p>
-      {PROVIDERS.map(p => (
+      {providers.map(p => (
         <div key={p.id} onClick={()=>setOpen(open===p.id?null:p.id)}
           style={card({padding:"13px 16px", marginBottom:10, cursor:"pointer", borderLeft:`3px solid ${open===p.id?p.color:"transparent"}`})}>
           <div style={{display:"flex", alignItems:"center", gap:14}}>
             <Avatar p={p} size={46} ring={open===p.id}/>
             <div style={{flex:1}}>
               <p style={{margin:0, fontFamily:ff, fontWeight:800, fontSize:14, color:C.text}}>{p.name}</p>
-              <p style={{margin:"3px 0 0", fontFamily:ffb, fontSize:12, color:C.sub}}>{p.cred}</p>
+              <p style={{margin:"3px 0 0", fontFamily:ffb, fontSize:12, color:C.sub}}>{p.credentials}</p>
             </div>
             <span style={{color:C.greyMid, fontSize:18}}>{open===p.id?"∨":"›"}</span>
           </div>
@@ -254,28 +275,50 @@ export function ProvidersPage({ onMessage }) {
 }
 
 // ─── Request Page ─────────────────────────────────────────────────────────────
-export function RequestPage() {
+export function RequestPage({ currentProvider }) {
   const [tab,setTab]     = useState("new");
-  const [type,setType]   = useState("daysoff");
+  const [type,setType]   = useState("Days Off");
   const [done,setDone]   = useState(false);
-  const [start,setStart] = useState("2026-10-21");
-  const [end,setEnd]     = useState("2026-10-25");
+  const [loading,setLoading] = useState(false);
+  const [myReqs,setMyReqs]   = useState([]);
+  const [start,setStart] = useState("");
+  const [end,setEnd]     = useState("");
+
+  useEffect(() => {
+    if (currentProvider) {
+      fetchRequests(currentProvider.id).then(setMyReqs);
+    }
+  }, [currentProvider]);
 
   const opts = [
-    ["daysoff","Days Off","Completely unavailable"],
-    ["offcall","Off Call Only","Available for clinic, no call"],
-    ["switch","Call Switch","Swap with another provider"],
+    ["Days Off",     "Completely unavailable"],
+    ["Off Call Only","Available for clinic, no call"],
+    ["Call Switch",  "Swap with another provider"],
   ];
-  const myReqs = [
-    {id:1, type:"Days Off",     dates:"Oct 21–25", s:"Pending"},
-    {id:2, type:"Off Call Only",dates:"Oct 14",    s:"Approved"},
-    {id:3, type:"Call Switch",  dates:"Oct 22↔29", s:"Pending"},
-  ];
+
+  const handleSubmit = async () => {
+    if (!start || !end || !currentProvider) return;
+    setLoading(true);
+    const { error } = await submitRequest({
+      providerId: currentProvider.id,
+      type,
+      startDate: start,
+      endDate: end,
+      notes: "",
+    });
+    if (!error) {
+      setDone(true);
+      const updated = await fetchRequests(currentProvider.id);
+      setMyReqs(updated);
+      setTimeout(() => setDone(false), 2500);
+    }
+    setLoading(false);
+  };
 
   return (
     <div style={{paddingBottom:20}}>
       <div style={{display:"flex", background:"#FFF", borderRadius:8, padding:3, marginBottom:16, border:`1px solid ${C.grey}`}}>
-        {[["new","New Request"],["mine","My Requests (3)"]].map(([k,l]) => (
+        {[["new","New Request"],["mine",`My Requests (${myReqs.length})`]].map(([k,l]) => (
           <button key={k} onClick={()=>setTab(k)} style={{
             flex:1, padding:"9px", borderRadius:6, border:"none",
             fontFamily:ff, fontWeight:800, fontSize:12, cursor:"pointer",
@@ -297,20 +340,20 @@ export function RequestPage() {
           </div>
         </div>
 
-        {opts.map(([k,title,sub]) => (
-          <div key={k} onClick={()=>setType(k)} style={card({
+        {opts.map(([title,sub]) => (
+          <div key={title} onClick={()=>setType(title)} style={card({
             padding:"13px 16px", marginBottom:10, cursor:"pointer",
-            border:`1.5px solid ${type===k?C.teal:C.grey}`,
-            background:type===k?`${C.wave}55`:"#FFF",
+            border:`1.5px solid ${type===title?C.teal:C.grey}`,
+            background:type===title?`${C.wave}55`:"#FFF",
             display:"flex", alignItems:"center", gap:14
           })}>
             <div style={{
               width:20, height:20, borderRadius:"50%", flexShrink:0,
-              border:`2px solid ${type===k?C.teal:C.greyMid}`,
-              background:type===k?C.teal:"transparent",
+              border:`2px solid ${type===title?C.teal:C.greyMid}`,
+              background:type===title?C.teal:"transparent",
               display:"flex", alignItems:"center", justifyContent:"center"
             }}>
-              {type===k && <div style={{width:7, height:7, borderRadius:"50%", background:"#fff"}}/>}
+              {type===title && <div style={{width:7, height:7, borderRadius:"50%", background:"#fff"}}/>}
             </div>
             <div>
               <p style={{margin:0, fontFamily:ff, fontWeight:800, fontSize:14, color:C.text}}>{title}</p>
@@ -323,7 +366,9 @@ export function RequestPage() {
           ? <div style={{padding:13, borderRadius:8, textAlign:"center", background:C.wave, border:`1.5px solid ${C.teal}`}}>
               <span style={{fontFamily:ff, fontWeight:900, fontSize:14, color:C.teal}}>Request Submitted!</span>
             </div>
-          : <button style={btnS()} onClick={()=>{setDone(true); setTimeout(()=>setDone(false),2500);}}>Submit Request</button>
+          : <button style={btnS({opacity:loading?0.7:1})} onClick={handleSubmit} disabled={loading}>
+              {loading ? "Submitting..." : "Submit Request"}
+            </button>
         }
       </>}
 
@@ -331,9 +376,9 @@ export function RequestPage() {
         <div key={r.id} style={card({padding:"13px 16px", marginBottom:10, display:"flex", alignItems:"center", justifyContent:"space-between"})}>
           <div>
             <p style={{margin:0, fontFamily:ff, fontWeight:800, fontSize:14, color:C.text}}>{r.type}</p>
-            <p style={{margin:"3px 0 0", fontFamily:ffb, fontSize:12, color:C.sub}}>{r.dates}</p>
+            <p style={{margin:"3px 0 0", fontFamily:ffb, fontSize:12, color:C.sub}}>{r.start_date} → {r.end_date}</p>
           </div>
-          <span style={badge(r.s)}>{r.s}</span>
+          <span style={badge(r.status)}>{r.status}</span>
         </div>
       ))}
     </div>
@@ -365,12 +410,18 @@ export function MorePage({ onNav }) {
 
 // ─── Admin Page ───────────────────────────────────────────────────────────────
 export function AdminPage({ onBack }) {
-  const [tab,setTab] = useState("requests");
-  const reqs = [
-    {id:1, pid:2, type:"Time Off",    dates:"Oct 21–25", s:"Pending"},
-    {id:2, pid:4, type:"No Call",     dates:"Oct 14",    s:"Approved"},
-    {id:3, pid:5, type:"Call Switch", dates:"Oct 22↔29", s:"Pending"},
-  ];
+  const [tab,setTab]   = useState("requests");
+  const [reqs,setReqs] = useState([]);
+
+  useEffect(() => {
+    fetchRequests().then(setReqs);
+  }, []);
+
+  const handleStatus = async (id, status) => {
+    await updateRequestStatus(id, status);
+    fetchRequests().then(setReqs);
+  };
+
   return (
     <div style={{paddingBottom:20}}>
       <div style={{display:"flex", alignItems:"center", gap:10, marginBottom:16}}>
@@ -389,30 +440,34 @@ export function AdminPage({ onBack }) {
       </div>
 
       {tab==="requests" && <>
-        {reqs.map(r => {
-          const p = byId(r.pid);
-          return (
-            <div key={r.id} style={card({padding:"13px 16px", marginBottom:10})}>
-              <div style={{display:"flex", alignItems:"center", gap:10, marginBottom:r.s==="Pending"?10:0}}>
-                <Avatar p={p} size={36}/>
-                <div style={{flex:1}}>
-                  <p style={{margin:0, fontFamily:ff, fontWeight:800, fontSize:13, color:C.text}}>{p.name}</p>
-                  <p style={{margin:"2px 0 0", fontFamily:ffb, fontSize:11, color:C.sub}}>{r.type} · {r.dates}</p>
-                </div>
-                <span style={badge(r.s)}>{r.s}</span>
+        {reqs.length === 0 && (
+          <div style={card({padding:"20px", textAlign:"center"})}>
+            <p style={{fontFamily:ff, fontSize:13, color:C.sub}}>No requests yet</p>
+          </div>
+        )}
+        {reqs.map(r => (
+          <div key={r.id} style={card({padding:"13px 16px", marginBottom:10})}>
+            <div style={{display:"flex", alignItems:"center", gap:10, marginBottom:r.status==="Pending"?10:0}}>
+              {r.providers && <Avatar p={r.providers} size={36}/>}
+              <div style={{flex:1}}>
+                <p style={{margin:0, fontFamily:ff, fontWeight:800, fontSize:13, color:C.text}}>{r.providers?.name}</p>
+                <p style={{margin:"2px 0 0", fontFamily:ffb, fontSize:11, color:C.sub}}>{r.type} · {r.start_date} → {r.end_date}</p>
               </div>
-              {r.s==="Pending" && (
-                <div style={{display:"flex", gap:8}}>
-                  <button style={btnS({flex:1, padding:"9px", fontSize:12, background:"#65b896"})}>Approve</button>
-                  <button style={btnS({flex:1, padding:"9px", fontSize:12, background:C.coral})}>Deny</button>
-                </div>
-              )}
+              <span style={badge(r.status)}>{r.status}</span>
             </div>
-          );
-        })}
+            {r.status==="Pending" && (
+              <div style={{display:"flex", gap:8}}>
+                <button style={btnS({flex:1, padding:"9px", fontSize:12, background:"#65b896"})}
+                  onClick={()=>handleStatus(r.id,"Approved")}>Approve</button>
+                <button style={btnS({flex:1, padding:"9px", fontSize:12, background:C.coral})}
+                  onClick={()=>handleStatus(r.id,"Denied")}>Deny</button>
+              </div>
+            )}
+          </div>
+        ))}
         <div style={card({padding:"14px"})}>
           <p style={{margin:"0 0 6px", fontFamily:ff, fontWeight:800, fontSize:14, color:C.text}}>AI Schedule Generator</p>
-          <p style={{margin:"0 0 12px", fontFamily:ffb, fontSize:12, color:C.sub}}>Generate an equitable call schedule for November 2026.</p>
+          <p style={{margin:"0 0 12px", fontFamily:ffb, fontSize:12, color:C.sub}}>Generate an equitable call schedule for next month.</p>
           <button style={btnS()}>Generate with AI</button>
         </div>
       </>}
@@ -435,18 +490,27 @@ export function AdminPage({ onBack }) {
 }
 
 // ─── Messages Page ────────────────────────────────────────────────────────────
-export function MessagesPage({ recipient, onBack }) {
+export function MessagesPage({ recipient, onBack, currentProvider }) {
   const [txt,setTxt]   = useState("");
-  const [msgs,setMsgs] = useState([
-    {id:1, from:"them", text:"Can you cover my call on Oct 22?", time:"9:42 AM"},
-    {id:2, from:"me",   text:"Let me check my schedule!",        time:"9:44 AM"},
-    {id:3, from:"them", text:"Wednesday — I have a conference.", time:"9:45 AM"},
-  ]);
-  const send = () => {
-    if(!txt.trim()) return;
-    setMsgs(m => [...m, {id:Date.now(), from:"me", text:txt, time:"Now"}]);
+  const [msgs,setMsgs] = useState([]);
+
+  useEffect(() => {
+    if (currentProvider && recipient) {
+      fetchMessages(currentProvider.id, recipient.id).then(setMsgs);
+    }
+  }, [currentProvider, recipient]);
+
+  const send = async () => {
+    if (!txt.trim() || !currentProvider || !recipient) return;
+    const { data } = await sendMessage({
+      senderId: currentProvider.id,
+      recipientId: recipient.id,
+      text: txt,
+    });
+    if (data) setMsgs(m => [...m, data]);
     setTxt("");
   };
+
   return (
     <div style={{display:"flex", flexDirection:"column", height:"100%"}}>
       <div style={{display:"flex", alignItems:"center", gap:12, marginBottom:14, flexShrink:0}}>
@@ -459,23 +523,26 @@ export function MessagesPage({ recipient, onBack }) {
       </div>
 
       <div style={{flex:1, overflowY:"auto", marginBottom:12}}>
-        {msgs.map(m => (
-          <div key={m.id} style={{display:"flex", justifyContent:m.from==="me"?"flex-end":"flex-start", marginBottom:10}}>
-            {m.from==="them" && recipient && (
-              <div style={{marginRight:8, alignSelf:"flex-end"}}><Avatar p={recipient} size={26}/></div>
-            )}
-            <div style={{
-              maxWidth:"72%", padding:"9px 13px",
-              borderRadius:m.from==="me"?"12px 12px 3px 12px":"12px 12px 12px 3px",
-              background:m.from==="me"?C.teal:"#FFF",
-              color:m.from==="me"?"#fff":C.text,
-              fontFamily:ffb, fontSize:13, boxShadow:"0 1px 5px rgba(0,0,0,0.07)"
-            }}>
-              <p style={{margin:"0 0 3px"}}>{m.text}</p>
-              <span style={{fontSize:10, opacity:.6}}>{m.time}</span>
+        {msgs.map(m => {
+          const isMe = currentProvider && m.sender_id === currentProvider.id;
+          return (
+            <div key={m.id} style={{display:"flex", justifyContent:isMe?"flex-end":"flex-start", marginBottom:10}}>
+              {!isMe && recipient && (
+                <div style={{marginRight:8, alignSelf:"flex-end"}}><Avatar p={recipient} size={26}/></div>
+              )}
+              <div style={{
+                maxWidth:"72%", padding:"9px 13px",
+                borderRadius:isMe?"12px 12px 3px 12px":"12px 12px 12px 3px",
+                background:isMe?C.teal:"#FFF",
+                color:isMe?"#fff":C.text,
+                fontFamily:ffb, fontSize:13, boxShadow:"0 1px 5px rgba(0,0,0,0.07)"
+              }}>
+                <p style={{margin:"0 0 3px"}}>{m.text}</p>
+                <span style={{fontSize:10, opacity:.6}}>{new Date(m.created_at).toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"})}</span>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <div style={{display:"flex", gap:8, flexShrink:0}}>
@@ -490,7 +557,7 @@ export function MessagesPage({ recipient, onBack }) {
 }
 
 // ─── Settings Page ────────────────────────────────────────────────────────────
-export function SettingsPage({ onBack }) {
+export function SettingsPage({ onBack, onLogout, currentProvider }) {
   const [faceId,setFaceId] = useState(true);
   const [notifs,setNotifs] = useState({all:true, published:true, changes:true, messages:true});
 
@@ -503,10 +570,10 @@ export function SettingsPage({ onBack }) {
 
       <div style={card({padding:"16px", marginBottom:12})}>
         <div style={{display:"flex", alignItems:"center", gap:14, marginBottom:14}}>
-          <Avatar p={PROVIDERS[0]} size={50} ring/>
+          {currentProvider && <Avatar p={currentProvider} size={50} ring/>}
           <div>
-            <p style={{margin:0, fontFamily:ff, fontWeight:800, fontSize:15, color:C.text}}>Dr. Sarah Mitchell</p>
-            <p style={{margin:"3px 0 0", fontFamily:ffb, fontSize:12, color:C.sub}}>sarah@beachesobgyn.com</p>
+            <p style={{margin:0, fontFamily:ff, fontWeight:800, fontSize:15, color:C.text}}>{currentProvider?.name}</p>
+            <p style={{margin:"3px 0 0", fontFamily:ffb, fontSize:12, color:C.sub}}>{currentProvider?.email}</p>
           </div>
         </div>
         {["Full Name","Phone Number","Display Name"].map(f => (
@@ -527,7 +594,7 @@ export function SettingsPage({ onBack }) {
           <Toggle val={faceId} fn={setFaceId}/>
         </div>
         <button style={oBtnS({width:"100%", marginBottom:8, padding:"10px"})}>Change Password</button>
-        <button style={oBtnS({width:"100%", padding:"10px"})}>Logout</button>
+        <button onClick={onLogout} style={oBtnS({width:"100%", padding:"10px", color:C.coral, borderColor:C.coral})}>Logout</button>
       </div>
 
       <div style={card({padding:"16px"})}>
@@ -545,13 +612,20 @@ export function SettingsPage({ onBack }) {
 
 // ─── Fairness Page ────────────────────────────────────────────────────────────
 export function FairnessPage({ onBack }) {
-  const data = PROVIDERS.map(p => ({
+  const [providers,setProviders] = useState([]);
+  const [schedule,setSchedule]   = useState({});
+
+  useEffect(() => {
+    fetchProviders().then(setProviders);
+    fetchSchedule(2026, 9).then(setSchedule);
+  }, []);
+
+  const scheduleValues = Object.values(schedule);
+  const data = providers.map(p => ({
     p,
-    calls: Object.values(CALL_SCHEDULE).filter(id => id===p.id).length,
-    wd: p.id+2,
-    we: p.id%3+1,
+    calls: scheduleValues.filter(s => s?.id === p.id).length,
   }));
-  const maxCalls = Math.max(...data.map(d=>d.calls));
+  const maxCalls = Math.max(...data.map(d=>d.calls), 1);
 
   return (
     <div style={{paddingBottom:20}}>
@@ -574,17 +648,6 @@ export function FairnessPage({ onBack }) {
             <div style={{height:6, background:C.grey, borderRadius:3, overflow:"hidden"}}>
               <div style={{height:"100%", width:`${(row.calls/maxCalls)*100}%`, background:row.p.color, borderRadius:3}}/>
             </div>
-          </div>
-        ))}
-      </div>
-
-      <div style={card({padding:"14px"})}>
-        <p style={{margin:"0 0 12px", fontFamily:ff, fontWeight:800, fontSize:14, color:C.text}}>Weekday vs. Weekend</p>
-        {data.map(row => (
-          <div key={row.p.id} style={{display:"flex", alignItems:"center", gap:10, marginBottom:10}}>
-            <Avatar p={row.p} size={26}/>
-            <span style={{fontFamily:ff, fontWeight:700, fontSize:12, color:C.text, flex:1}}>{row.p.short}</span>
-            <span style={{fontFamily:ff, fontWeight:600, fontSize:11, color:C.sub}}>WD: {row.wd}  |  WE: {row.we}</span>
           </div>
         ))}
       </div>
