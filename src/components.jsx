@@ -373,6 +373,7 @@ export function MorePage({ onNav, currentProvider }) {
   const items = [
     ...(isAdmin ? [["🔐","Admin Panel","admin"]] : []),
     ["📋","Call Logic","logic"],
+    ["🏖️","Upcoming Vacations","vacations"],
     ["⚖️","Call Fairness","fairness"],
     ["⚙️","Settings","settings"],
   ];
@@ -608,6 +609,71 @@ export function SettingsPage({ onBack, onLogout, currentProvider }) {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+
+export function UpcomingVacationsPage({ onBack }) {
+  const [requests, setRequests] = useState([]);
+  const [loading, setLoading]   = useState(true);
+
+  useEffect(() => {
+    fetchRequests().then(all => {
+      const today = new Date();
+      today.setHours(0,0,0,0);
+      const upcoming = all
+        .filter(r => r.status === "Approved" && new Date(r.end_date) >= today)
+        .sort((a, b) => new Date(a.start_date) - new Date(b.start_date));
+      setRequests(upcoming);
+      setLoading(false);
+    });
+  }, []);
+
+  const formatDate = d => new Date(d + "T00:00:00").toLocaleDateString("en-US", { month:"short", day:"numeric", year:"numeric" });
+
+  const getDays = (start, end) => {
+    const s = new Date(start + "T00:00:00");
+    const e = new Date(end + "T00:00:00");
+    return Math.round((e - s) / (1000*60*60*24)) + 1;
+  };
+
+  return (
+    <div style={{paddingBottom:20}}>
+      <div style={{display:"flex", alignItems:"center", gap:10, marginBottom:16}}>
+        <button onClick={onBack} style={{background:"none", border:"none", fontSize:22, cursor:"pointer", color:C.primary}}>‹</button>
+        <span style={{fontFamily:ff, fontWeight:900, fontSize:16, color:C.text}}>Upcoming Vacations</span>
+      </div>
+      {loading && <div style={{textAlign:"center", padding:"20px", color:C.sub, fontFamily:ff, fontSize:13}}>Loading...</div>}
+      {!loading && requests.length === 0 && (
+        <div style={card({padding:"20px", textAlign:"center"})}>
+          <p style={{fontFamily:ff, fontSize:13, color:C.sub, margin:0}}>No upcoming time off</p>
+        </div>
+      )}
+      {requests.map(r => {
+        const today = new Date(); today.setHours(0,0,0,0);
+        const start = new Date(r.start_date + "T00:00:00");
+        const isActive = start <= today;
+        const days = getDays(r.start_date, r.end_date);
+        return (
+          <div key={r.id} style={card({padding:"13px 16px", marginBottom:10, borderLeft:`3px solid ${r.providers?.color || C.teal}`})}>
+            <div style={{display:"flex", alignItems:"center", gap:12}}>
+              {r.providers && <Avatar p={r.providers} size={40} ring/>}
+              <div style={{flex:1}}>
+                <div style={{display:"flex", alignItems:"center", gap:8, marginBottom:3}}>
+                  <p style={{margin:0, fontFamily:ff, fontWeight:800, fontSize:13, color:C.text}}>{r.providers?.name}</p>
+                  {isActive && <span style={{fontFamily:ff, fontWeight:700, fontSize:10, color:"#fff", background:C.teal, borderRadius:4, padding:"2px 6px"}}>Active</span>}
+                </div>
+                <p style={{margin:0, fontFamily:ffb, fontSize:12, color:C.sub}}>{r.type}</p>
+                <p style={{margin:"3px 0 0", fontFamily:ffb, fontSize:12, color:C.sub}}>
+                  {formatDate(r.start_date)} → {formatDate(r.end_date)}
+                  <span style={{marginLeft:8, fontFamily:ff, fontWeight:700, fontSize:11, color:r.providers?.color || C.teal}}>{days} day{days>1?"s":""}</span>
+                </p>
+              </div>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

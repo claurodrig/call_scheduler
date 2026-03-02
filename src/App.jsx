@@ -14,6 +14,7 @@ import {
   MessagesPage,
   SettingsPage,
   FairnessPage,
+  UpcomingVacationsPage,
 } from "./components";
 
 const NAV = [
@@ -107,6 +108,7 @@ export default function App() {
     if (sub === "messages") return <MessagesPage recipient={msgRecip} onBack={()=>setSub(null)} currentProvider={currentProvider}/>;
     if (sub === "admin")    return <AdminPage onBack={()=>setSub(null)}/>;
     if (sub === "fairness") return <FairnessPage onBack={()=>setSub(null)}/>;
+    if (sub === "vacations") return <UpcomingVacationsPage onBack={()=>setSub(null)}/>;
     if (sub === "settings") return <SettingsPage onBack={()=>setSub(null)} onLogout={handleLogout} currentProvider={currentProvider}/>;
     if (tab === "home")     return <HomePage/>;
     if (tab === "providers") return <ProvidersPage onMessage={onMessage}/>;
