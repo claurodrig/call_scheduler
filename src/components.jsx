@@ -61,6 +61,17 @@ export function IcoGear({color}) {
 }
 
 export function Avatar({ p, size=40, ring=false }) {
+  if (p.avatar_url) {
+    return (
+      <div style={{
+        width:size, height:size, borderRadius:"50%", flexShrink:0,
+        outline:ring?`3px solid ${p.color}55`:"none", outlineOffset:2,
+        overflow:"hidden"
+      }}>
+        <img src={p.avatar_url} alt={p.name} style={{width:"100%", height:"100%", objectFit:"cover"}}/>
+      </div>
+    );
+  }
   return (
     <div style={{
       width:size, height:size, borderRadius:"50%", background:p.color,
