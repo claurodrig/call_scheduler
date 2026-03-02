@@ -229,6 +229,7 @@ export function HomePage() {
     </div>
   );
 }
+
 export function ProvidersPage({ onMessage }) {
   const [providers, setProviders] = useState([]);
   const [open, setOpen]           = useState(null);
@@ -485,31 +486,21 @@ export function AdminPage({ onBack }) {
     </div>
   );
 }
+
 export function MessagesPage({ recipient, onBack, currentProvider }) {
   const [txt,setTxt]   = useState("");
   const [msgs,setMsgs] = useState([]);
 
- useEffect(() => {
-    if (currentProvider && recipient) {
+  useEffect(() => {
+    if (!currentProvider || !recipient) return;
+
+    fetchMessages(currentProvider.id, recipient.id).then(setMsgs);
+
+    const interval = setInterval(() => {
       fetchMessages(currentProvider.id, recipient.id).then(setMsgs);
+    }, 3000);
 
-      const channel = supabase
-        .channel("messages")
-        .on("postgres_changes", {
-          event: "INSERT",
-          schema: "public",
-          table: "messages",
-        }, payload => {
-          const m = payload.new;
-          const isRelevant =
-            (m.sender_id === currentProvider.id && m.recipient_id === recipient.id) ||
-            (m.sender_id === recipient.id && m.recipient_id === currentProvider.id);
-          if (isRelevant) setMsgs(prev => [...prev, m]);
-        })
-        .subscribe();
-
-      return () => supabase.removeChannel(channel);
-    }
+    return () => clearInterval(interval);
   }, [currentProvider, recipient]);
 
   const send = async () => {
