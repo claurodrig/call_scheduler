@@ -1,0 +1,12 @@
+{
+  "type": "commonjs"
+}
+```
+
+In VS Code, right-click the `api` folder → **New File** → name it `package.json` → paste that in → save with **Cmd+S**.
+
+Then push:
+```
+git add .
+git commit -m "fix api module type"
+git push
