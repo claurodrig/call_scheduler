@@ -4,7 +4,7 @@ import {
   ff, ffb, dkey, getDays, getFirst,
   card, btnS, oBtnS, inpS, lblS, badge
 } from "./data";
-import { fetchSchedule, fetchProviders, fetchRequests, submitRequest, updateRequestStatus, fetchMessages, sendMessage, generateSchedule, saveGeneratedSchedule, cancelRequest } from "./api";
+import { fetchSchedule, fetchProviders, fetchRequests, submitRequest, updateRequestStatus, fetchMessages, sendMessage, generateSchedule, saveGeneratedSchedule, cancelRequest, fetchNoCallDayRequests, submitNoCallDayRequest, updateNoCallDayStatus } from "./api";
 import { supabase } from "./supabase";
 
 export function IcoHome({color}) {
@@ -59,8 +59,6 @@ export function IcoGear({color}) {
     </svg>
   );
 }
-
-
 export function IcoLock({color}) {
   return (
     <svg width={22} height={22} viewBox="0 0 24 24" fill="none">
@@ -102,6 +100,7 @@ export function IcoScale({color}) {
     </svg>
   );
 }
+
 export function Avatar({ p, size=40, ring=false }) {
   if (p.avatar_url) {
     return (
@@ -305,28 +304,39 @@ export function ProvidersPage({ onMessage }) {
 }
 
 export function RequestPage({ currentProvider }) {
-  const [tab,setTab]         = useState("new");
-  const [type,setType]       = useState("Days Off");
-  const [done,setDone]       = useState(false);
-  const [loading,setLoading] = useState(false);
-  const [myReqs,setMyReqs]   = useState([]);
-  const [start,setStart]     = useState("");
-  const [end,setEnd]         = useState("");
+  const [tab, setTab]         = useState("new");
+  const [type, setType]       = useState("Days Off");
+  const [done, setDone]       = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [myReqs, setMyReqs]   = useState([]);
+  const [start, setStart]     = useState("");
+  const [end, setEnd]         = useState("");
+
+  // No-call day state
+  const [noCallReqs, setNoCallReqs]       = useState([]);
+  const [noCallDay, setNoCallDay]         = useState("");
+  const [noCallNotes, setNoCallNotes]     = useState("");
+  const [noCallDone, setNoCallDone]       = useState(false);
+  const [noCallLoading, setNoCallLoading] = useState(false);
+
+  const DAYS = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
 
   useEffect(() => {
-    if (currentProvider) fetchRequests(currentProvider.id).then(setMyReqs);
+    if (!currentProvider) return;
+    fetchRequests(currentProvider.id).then(setMyReqs);
+    fetchNoCallDayRequests(currentProvider.id).then(setNoCallReqs);
   }, [currentProvider]);
 
   const opts = [
-    ["Days Off","Completely unavailable"],
-    ["Off Call Only","Available for clinic, no call"],
-    ["Call Switch","Swap with another provider"],
+    ["Days Off",      "Completely unavailable"],
+    ["Off Call Only", "Available for clinic, no call"],
+    ["Call Switch",   "Swap with another provider"],
   ];
 
   const handleSubmit = async () => {
     if (!start || !end || !currentProvider) return;
     setLoading(true);
-    const { error } = await submitRequest({ providerId:currentProvider.id, type, startDate:start, endDate:end, notes:"" });
+    const { error } = await submitRequest({ providerId: currentProvider.id, type, startDate: start, endDate: end, notes: "" });
     if (!error) {
       setDone(true);
       fetchRequests(currentProvider.id).then(setMyReqs);
@@ -335,67 +345,107 @@ export function RequestPage({ currentProvider }) {
     setLoading(false);
   };
 
+  const handleNoCallSubmit = async () => {
+    if (!noCallDay || !currentProvider) return;
+    setNoCallLoading(true);
+    const { error } = await submitNoCallDayRequest({ providerId: currentProvider.id, requestedDay: noCallDay, notes: noCallNotes });
+    if (!error) {
+      setNoCallDone(true);
+      setNoCallDay("");
+      setNoCallNotes("");
+      fetchNoCallDayRequests(currentProvider.id).then(setNoCallReqs);
+      setTimeout(() => setNoCallDone(false), 2500);
+    }
+    setNoCallLoading(false);
+  };
+
+  // Days already pending or approved — disable in dropdown
+  const takenDays = noCallReqs.filter(r => r.status !== "Denied").map(r => r.requested_day);
+
+  const noCallBadgeStyle = (status) => {
+    if (status === "Approved") return { ...badge(status), background: "#65b896" };
+    if (status === "Denied")   return { ...badge(status), background: C.coral };
+    return badge(status);
+  };
+
   return (
-    <div style={{paddingBottom:20}}>
-      <div style={{display:"flex", background:"#FFF", borderRadius:8, padding:3, marginBottom:16, border:`1px solid ${C.grey}`}}>
-        {[["new","New Request"],["mine",`My Requests (${myReqs.length})`]].map(([k,l]) => (
-          <button key={k} onClick={()=>setTab(k)} style={{
-            flex:1, padding:"9px", borderRadius:6, border:"none",
-            fontFamily:ff, fontWeight:800, fontSize:12, cursor:"pointer",
-            background:tab===k?C.teal:"transparent", color:tab===k?"#fff":C.sub
+    <div style={{ paddingBottom: 20 }}>
+
+      {/* Tab Bar */}
+      <div style={{ display: "flex", background: "#FFF", borderRadius: 8, padding: 3, marginBottom: 16, border: `1px solid ${C.grey}` }}>
+        {[
+          ["new",    "New Request"],
+          ["mine",   `My Requests (${myReqs.length})`],
+          ["nocall", "No-Call Day"],
+        ].map(([k, l]) => (
+          <button key={k} onClick={() => setTab(k)} style={{
+            flex: 1, padding: "9px 4px", borderRadius: 6, border: "none",
+            fontFamily: ff, fontWeight: 800, fontSize: 11, cursor: "pointer",
+            background: tab === k ? C.teal : "transparent",
+            color: tab === k ? "#fff" : C.sub,
           }}>{l}</button>
         ))}
       </div>
-      {tab==="new" && <>
-        <div style={card({padding:"14px", marginBottom:12, display:"flex", gap:10, alignItems:"center"})}>
-          <div style={{flex:1}}>
+
+      {/* Tab: New Request */}
+      {tab === "new" && <>
+        <div style={card({ padding: "14px", marginBottom: 12, display: "flex", gap: 10, alignItems: "center" })}>
+          <div style={{ flex: 1 }}>
             <span style={lblS}>Start</span>
-            <input type="date" value={start} onChange={e=>setStart(e.target.value)} style={inpS}/>
+            <input type="date" value={start} onChange={e => setStart(e.target.value)} style={inpS} />
           </div>
-          <span style={{fontSize:18, color:C.teal, marginTop:16}}>→</span>
-          <div style={{flex:1}}>
+          <span style={{ fontSize: 18, color: C.teal, marginTop: 16 }}>→</span>
+          <div style={{ flex: 1 }}>
             <span style={lblS}>End</span>
-            <input type="date" value={end} onChange={e=>setEnd(e.target.value)} style={inpS}/>
+            <input type="date" value={end} onChange={e => setEnd(e.target.value)} style={inpS} />
           </div>
         </div>
-        {opts.map(([title,sub]) => (
-          <div key={title} onClick={()=>setType(title)} style={card({
-            padding:"13px 16px", marginBottom:10, cursor:"pointer",
-            border:`1.5px solid ${type===title?C.teal:C.grey}`,
-            background:type===title?`${C.wave}55`:"#FFF",
-            display:"flex", alignItems:"center", gap:14
+        {opts.map(([title, sub]) => (
+          <div key={title} onClick={() => setType(title)} style={card({
+            padding: "13px 16px", marginBottom: 10, cursor: "pointer",
+            border: `1.5px solid ${type === title ? C.teal : C.grey}`,
+            background: type === title ? `${C.wave}55` : "#FFF",
+            display: "flex", alignItems: "center", gap: 14,
           })}>
-            <div style={{width:20, height:20, borderRadius:"50%", flexShrink:0, border:`2px solid ${type===title?C.teal:C.greyMid}`, background:type===title?C.teal:"transparent", display:"flex", alignItems:"center", justifyContent:"center"}}>
-              {type===title && <div style={{width:7, height:7, borderRadius:"50%", background:"#fff"}}/>}
+            <div style={{
+              width: 20, height: 20, borderRadius: "50%", flexShrink: 0,
+              border: `2px solid ${type === title ? C.teal : C.greyMid}`,
+              background: type === title ? C.teal : "transparent",
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}>
+              {type === title && <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#fff" }} />}
             </div>
             <div>
-              <p style={{margin:0, fontFamily:ff, fontWeight:800, fontSize:14, color:C.text}}>{title}</p>
-              <p style={{margin:"2px 0 0", fontFamily:ffb, fontSize:11, color:C.sub}}>{sub}</p>
+              <p style={{ margin: 0, fontFamily: ff, fontWeight: 800, fontSize: 14, color: C.text }}>{title}</p>
+              <p style={{ margin: "2px 0 0", fontFamily: ffb, fontSize: 11, color: C.sub }}>{sub}</p>
             </div>
           </div>
         ))}
         {done
-          ? <div style={{padding:13, borderRadius:8, textAlign:"center", background:C.wave, border:`1.5px solid ${C.teal}`}}>
-              <span style={{fontFamily:ff, fontWeight:900, fontSize:14, color:C.teal}}>Request Submitted!</span>
+          ? <div style={{ padding: 13, borderRadius: 8, textAlign: "center", background: C.wave, border: `1.5px solid ${C.teal}` }}>
+              <span style={{ fontFamily: ff, fontWeight: 900, fontSize: 14, color: C.teal }}>Request Submitted!</span>
             </div>
-          : <button style={btnS({opacity:loading?0.7:1})} onClick={handleSubmit} disabled={loading}>
+          : <button style={btnS({ opacity: loading ? 0.7 : 1 })} onClick={handleSubmit} disabled={loading}>
               {loading ? "Submitting..." : "Submit Request"}
             </button>
         }
       </>}
-      {tab==="mine" && myReqs.map(r => {
+
+      {/* Tab: My Requests */}
+      {tab === "mine" && myReqs.map(r => {
         const canCancel = new Date(r.start_date) > new Date();
         return (
-          <div key={r.id} style={card({padding:"13px 16px", marginBottom:10})}>
-            <div style={{display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:canCancel?10:0}}>
+          <div key={r.id} style={card({ padding: "13px 16px", marginBottom: 10 })}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: canCancel ? 10 : 0 }}>
               <div>
-                <p style={{margin:0, fontFamily:ff, fontWeight:800, fontSize:14, color:C.text}}>{r.type}</p>
-                <p style={{margin:"3px 0 0", fontFamily:ffb, fontSize:12, color:C.sub}}>{r.start_date} → {r.end_date}</p>
+                <p style={{ margin: 0, fontFamily: ff, fontWeight: 800, fontSize: 14, color: C.text }}>{r.type}</p>
+                <p style={{ margin: "3px 0 0", fontFamily: ffb, fontSize: 12, color: C.sub }}>{r.start_date} → {r.end_date}</p>
               </div>
               <span style={badge(r.status)}>{r.status}</span>
             </div>
             {canCancel && (
-              <button style={oBtnS({width:"100%", padding:"8px", fontSize:12, color:C.coral, borderColor:C.coral})}
+              <button
+                style={oBtnS({ width: "100%", padding: "8px", fontSize: 12, color: C.coral, borderColor: C.coral })}
                 onClick={async () => {
                   const ok = await cancelRequest(r.id);
                   if (ok) fetchRequests(currentProvider.id).then(setMyReqs);
@@ -406,6 +456,89 @@ export function RequestPage({ currentProvider }) {
           </div>
         );
       })}
+
+      {/* Tab: No-Call Day */}
+      {tab === "nocall" && <>
+
+        {/* Info banner */}
+        <div style={card({ padding: "12px 14px", marginBottom: 14, background: `${C.wave}88`, border: `1px solid ${C.teal}33` })}>
+          <p style={{ margin: 0, fontFamily: ff, fontWeight: 800, fontSize: 13, color: C.teal }}>Recurring Weekly No-Call Day</p>
+          <p style={{ margin: "4px 0 0", fontFamily: ffb, fontSize: 12, color: C.sub }}>
+            Request one day per week where you won't be assigned to call. Requires admin approval.
+          </p>
+        </div>
+
+        {/* Show current approved no-call day if set on provider */}
+        {currentProvider?.no_call_day && (
+          <div style={card({ padding: "12px 14px", marginBottom: 14, borderLeft: `3px solid #65b896` })}>
+            <p style={{ margin: 0, fontFamily: ff, fontWeight: 700, fontSize: 11, color: C.sub, textTransform: "uppercase", letterSpacing: 1 }}>
+              Current No-Call Day
+            </p>
+            <p style={{ margin: "4px 0 0", fontFamily: ff, fontWeight: 900, fontSize: 15, color: C.text }}>
+              {currentProvider.no_call_day}
+            </p>
+          </div>
+        )}
+
+        {/* Request form */}
+        <div style={card({ padding: "14px", marginBottom: 14 })}>
+          <p style={{ margin: "0 0 12px", fontFamily: ff, fontWeight: 800, fontSize: 13, color: C.text }}>Submit a New Request</p>
+
+          <span style={lblS}>Preferred Day</span>
+          <select value={noCallDay} onChange={e => setNoCallDay(e.target.value)} style={{ ...inpS, marginBottom: 12 }}>
+            <option value="">Select a day…</option>
+            {DAYS.map(d => (
+              <option key={d} value={d} disabled={takenDays.includes(d)}>
+                {d}{takenDays.includes(d) ? " (already requested)" : ""}
+              </option>
+            ))}
+          </select>
+
+          <span style={lblS}>Notes (optional)</span>
+          <textarea
+            value={noCallNotes}
+            onChange={e => setNoCallNotes(e.target.value)}
+            placeholder="e.g. Teaching duties, research day…"
+            rows={2}
+            style={{ ...inpS, resize: "none", marginBottom: 12, fontFamily: ffb }}
+          />
+
+          {noCallDone
+            ? <div style={{ padding: 13, borderRadius: 8, textAlign: "center", background: C.wave, border: `1.5px solid ${C.teal}` }}>
+                <span style={{ fontFamily: ff, fontWeight: 900, fontSize: 14, color: C.teal }}>Request Submitted!</span>
+              </div>
+            : <button
+                style={btnS({ opacity: (!noCallDay || noCallLoading) ? 0.6 : 1 })}
+                onClick={handleNoCallSubmit}
+                disabled={!noCallDay || noCallLoading}
+              >
+                {noCallLoading ? "Submitting…" : "Submit Request"}
+              </button>
+          }
+        </div>
+
+        {/* Request history */}
+        {noCallReqs.length > 0 && <>
+          <p style={{ fontFamily: ff, fontWeight: 800, fontSize: 11, color: C.sub, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>
+            My Requests
+          </p>
+          {noCallReqs.map(r => (
+            <div key={r.id} style={card({ padding: "13px 16px", marginBottom: 10 })}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div>
+                  <p style={{ margin: 0, fontFamily: ff, fontWeight: 800, fontSize: 14, color: C.text }}>{r.requested_day}</p>
+                  <p style={{ margin: "3px 0 0", fontFamily: ffb, fontSize: 11, color: C.sub }}>
+                    Recurring weekly · {new Date(r.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                  </p>
+                  {r.notes && <p style={{ margin: "3px 0 0", fontFamily: ffb, fontSize: 11, color: C.sub }}>{r.notes}</p>}
+                </div>
+                <span style={noCallBadgeStyle(r.status)}>{r.status}</span>
+              </div>
+            </div>
+          ))}
+        </>}
+      </>}
+
     </div>
   );
 }
@@ -483,15 +616,26 @@ function AIScheduleGenerator() {
 }
 
 export function AdminPage({ onBack }) {
-  const [tab,setTab]   = useState("requests");
-  const [reqs,setReqs] = useState([]);
+  const [tab, setTab]   = useState("requests");
+  const [reqs, setReqs] = useState([]);
+  const [noCallReqs, setNoCallReqs] = useState([]);
 
-  useEffect(() => { fetchRequests().then(setReqs); }, []);
+  useEffect(() => {
+    fetchRequests().then(setReqs);
+    fetchNoCallDayRequests().then(setNoCallReqs);
+  }, []);
 
   const handleStatus = async (id, status) => {
     await updateRequestStatus(id, status);
     fetchRequests().then(setReqs);
   };
+
+  const handleNoCallStatus = async (id, status, providerId, day) => {
+    await updateNoCallDayStatus(id, status, providerId, day);
+    fetchNoCallDayRequests().then(setNoCallReqs);
+  };
+
+  const pendingNoCall = noCallReqs.filter(r => r.status === "Pending").length;
 
   return (
     <div style={{paddingBottom:20}}>
@@ -500,16 +644,23 @@ export function AdminPage({ onBack }) {
         <span style={{fontFamily:ff, fontWeight:900, fontSize:16, color:C.text}}>Admin Panel</span>
       </div>
       <div style={{display:"flex", background:"#FFF", borderRadius:8, padding:3, marginBottom:16, border:`1px solid ${C.grey}`}}>
-        {[["requests","Requests"],["schedule","Schedule"]].map(([k,l]) => (
-          <button key={k} onClick={()=>setTab(k)} style={{
-            flex:1, padding:"9px", borderRadius:6, border:"none",
-            fontFamily:ff, fontWeight:800, fontSize:12, cursor:"pointer",
-            background:tab===k?C.teal:"transparent", color:tab===k?"#fff":C.sub
+        {[
+          ["requests", "Requests"],
+          ["nocall",   `No-Call Day${pendingNoCall > 0 ? ` (${pendingNoCall})` : ""}`],
+          ["schedule", "Schedule"],
+        ].map(([k, l]) => (
+          <button key={k} onClick={() => setTab(k)} style={{
+            flex: 1, padding: "9px 4px", borderRadius: 6, border: "none",
+            fontFamily: ff, fontWeight: 800, fontSize: 11, cursor: "pointer",
+            background: tab === k ? C.teal : "transparent",
+            color: tab === k ? "#fff" : C.sub,
           }}>{l}</button>
         ))}
       </div>
-      {tab==="requests" && <>
-        {reqs.length===0 && <div style={card({padding:"20px", textAlign:"center"})}><p style={{fontFamily:ff, fontSize:13, color:C.sub}}>No requests yet</p></div>}
+
+      {/* Admin: Regular Requests */}
+      {tab === "requests" && <>
+        {reqs.length === 0 && <div style={card({padding:"20px", textAlign:"center"})}><p style={{fontFamily:ff, fontSize:13, color:C.sub}}>No requests yet</p></div>}
         {reqs.map(r => (
           <div key={r.id} style={card({padding:"13px 16px", marginBottom:10})}>
             <div style={{display:"flex", alignItems:"center", gap:10, marginBottom:r.status==="Pending"?10:0}}>
@@ -520,7 +671,7 @@ export function AdminPage({ onBack }) {
               </div>
               <span style={badge(r.status)}>{r.status}</span>
             </div>
-            {r.status==="Pending" && (
+            {r.status === "Pending" && (
               <div style={{display:"flex", gap:8}}>
                 <button style={btnS({flex:1, padding:"9px", fontSize:12, background:"#65b896"})} onClick={()=>handleStatus(r.id,"Approved")}>Approve</button>
                 <button style={btnS({flex:1, padding:"9px", fontSize:12, background:C.coral})} onClick={()=>handleStatus(r.id,"Denied")}>Deny</button>
@@ -530,7 +681,47 @@ export function AdminPage({ onBack }) {
         ))}
         <AIScheduleGenerator/>
       </>}
-      {tab==="schedule" && (
+
+      {/* Admin: No-Call Day Requests */}
+      {tab === "nocall" && <>
+        {noCallReqs.length === 0 && (
+          <div style={card({padding:"20px", textAlign:"center"})}>
+            <p style={{fontFamily:ff, fontSize:13, color:C.sub}}>No no-call day requests yet</p>
+          </div>
+        )}
+        {noCallReqs.map(r => (
+          <div key={r.id} style={card({padding:"13px 16px", marginBottom:10})}>
+            <div style={{display:"flex", alignItems:"center", gap:10, marginBottom: r.status === "Pending" ? 10 : 0}}>
+              {r.providers && <Avatar p={r.providers} size={36}/>}
+              <div style={{flex:1}}>
+                <p style={{margin:0, fontFamily:ff, fontWeight:800, fontSize:13, color:C.text}}>{r.providers?.name}</p>
+                <p style={{margin:"2px 0 0", fontFamily:ffb, fontSize:11, color:C.sub}}>
+                  Recurring · {r.requested_day}
+                </p>
+                {r.notes && <p style={{margin:"2px 0 0", fontFamily:ffb, fontSize:11, color:C.sub}}>{r.notes}</p>}
+              </div>
+              <span style={badge(r.status)}>{r.status}</span>
+            </div>
+            {r.status === "Pending" && (
+              <div style={{display:"flex", gap:8}}>
+                <button
+                  style={btnS({flex:1, padding:"9px", fontSize:12, background:"#65b896"})}
+                  onClick={() => handleNoCallStatus(r.id, "Approved", r.provider_id, r.requested_day)}>
+                  Approve
+                </button>
+                <button
+                  style={btnS({flex:1, padding:"9px", fontSize:12, background:C.coral})}
+                  onClick={() => handleNoCallStatus(r.id, "Denied", r.provider_id, r.requested_day)}>
+                  Deny
+                </button>
+              </div>
+            )}
+          </div>
+        ))}
+      </>}
+
+      {/* Admin: Schedule */}
+      {tab === "schedule" && (
         <div>
           <div style={card({padding:"14px", marginBottom:10})}>
             <p style={{margin:"0 0 10px", fontFamily:ff, fontWeight:800, fontSize:14, color:C.text}}>October 2026</p>
@@ -553,13 +744,10 @@ export function MessagesPage({ recipient, onBack, currentProvider }) {
 
   useEffect(() => {
     if (!currentProvider || !recipient) return;
-
     fetchMessages(currentProvider.id, recipient.id).then(setMsgs);
-
     const interval = setInterval(() => {
       fetchMessages(currentProvider.id, recipient.id).then(setMsgs);
     }, 3000);
-
     return () => clearInterval(interval);
   }, [currentProvider, recipient]);
 
@@ -657,7 +845,6 @@ export function SettingsPage({ onBack, onLogout, currentProvider }) {
   );
 }
 
-
 export function UpcomingVacationsPage({ onBack }) {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading]   = useState(true);
@@ -676,7 +863,7 @@ export function UpcomingVacationsPage({ onBack }) {
 
   const formatDate = d => new Date(d + "T00:00:00").toLocaleDateString("en-US", { month:"short", day:"numeric", year:"numeric" });
 
-  const getDays = (start, end) => {
+  const getDaysCount = (start, end) => {
     const s = new Date(start + "T00:00:00");
     const e = new Date(end + "T00:00:00");
     return Math.round((e - s) / (1000*60*60*24)) + 1;
@@ -698,7 +885,7 @@ export function UpcomingVacationsPage({ onBack }) {
         const today = new Date(); today.setHours(0,0,0,0);
         const start = new Date(r.start_date + "T00:00:00");
         const isActive = start <= today;
-        const days = getDays(r.start_date, r.end_date);
+        const days = getDaysCount(r.start_date, r.end_date);
         return (
           <div key={r.id} style={card({padding:"13px 16px", marginBottom:10, borderLeft:`3px solid ${r.providers?.color || C.teal}`})}>
             <div style={{display:"flex", alignItems:"center", gap:12}}>
