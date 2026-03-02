@@ -106,7 +106,7 @@ export function Header({ onNotif, onSettings, logoSrc }) {
       padding:"8px 16px", background:"#FFF", borderBottom:`1px solid ${C.grey}`
     }}>
       <div style={{width:50}}/>
-      <img src={logoSrc} alt="Beaches OBGYN" style={{height:38, objectFit:"contain"}}/>
+      <img src={logoSrc} alt="Beaches OBGYN" style={{height:52, objectFit:"contain"}}/>
       <div style={{display:"flex", gap:14, alignItems:"center", width:50, justifyContent:"flex-end"}}>
         <div style={{position:"relative", cursor:"pointer"}} onClick={onNotif}>
           <IcoBell color={C.teal}/>
