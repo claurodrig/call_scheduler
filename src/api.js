@@ -12,7 +12,6 @@ export async function fetchProviders() {
 
 // ─── Schedule ─────────────────────────────────────────────────────────────────
 export async function fetchSchedule(year, month) {
-  // month is 0-indexed (0 = January)
   const start = `${year}-${String(month + 1).padStart(2, "0")}-01`;
   const end   = `${year}-${String(month + 1).padStart(2, "0")}-31`;
 
@@ -25,7 +24,6 @@ export async function fetchSchedule(year, month) {
 
   if (error) console.error("fetchSchedule:", error);
 
-  // Convert to a simple object: { "2026-10-01": providerObject }
   const schedule = {};
   (data || []).forEach(row => {
     schedule[row.date] = row.providers;
@@ -114,6 +112,7 @@ export async function fetchCurrentProvider(email) {
   if (error) console.error("fetchCurrentProvider:", error);
   return data || null;
 }
+
 // ─── AI Schedule Generator ────────────────────────────────────────────────────
 export async function generateSchedule({ providers, requests, year, month, previousSchedule }) {
   const response = await fetch("/api/generate-schedule", {
@@ -126,23 +125,27 @@ export async function generateSchedule({ providers, requests, year, month, previ
 }
 
 export async function saveGeneratedSchedule(scheduleMap, providers) {
-  // scheduleMap is { "2026-11-01": "sarah@beachesobgyn.com", ... }
   const rows = Object.entries(scheduleMap).map(([date, email]) => {
     const provider = providers.find(p => p.email === email);
     return { date, provider_id: provider?.id };
   }).filter(r => r.provider_id);
 
-  // Delete existing schedule for that month first
-  if (rows.length > 0) {
-    const month = rows[0].date.slice(0, 7); // "2026-11"
-    await supabase
-      .from("call_schedule")
-      .delete()
-      .gte("date", `${month}-01`)
-      .lte("date", `${month}-31`);
+  console.log("Saving rows:", rows);
+
+  if (rows.length === 0) {
+    console.error("No rows to save — emails may not match providers");
+    return false;
   }
 
+  const month = rows[0].date.slice(0, 7);
+  await supabase
+    .from("call_schedule")
+    .delete()
+    .gte("date", `${month}-01`)
+    .lte("date", `${month}-31`);
+
   const { error } = await supabase.from("call_schedule").insert(rows);
-  if (error) console.error("saveGeneratedSchedule:", error);
+  if (error) console.error("saveGeneratedSchedule error:", error);
+  else console.log("Saved successfully!");
   return !error;
 }
