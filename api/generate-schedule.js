@@ -16,15 +16,26 @@ export default async function handler(req, res) {
     `- ${p.name} (${p.credentials}, email: ${p.email}, no-call day preference: ${p.no_call_day || "none"}, participation: ${p.participation_percent || 100}%)`
   ).join("\n");
 
-  // Build blocked dates per provider — end date is included, first available is end+1
-  const approvedRequests = requests.filter(r => r.status === "Approved");
+  // Build a map of provider_id -> email for fast lookup
+  const providerEmailMap = {};
+  for (const p of providers) {
+    providerEmailMap[p.id] = p.email;
+  }
+
+  // Build approved requests with correct email lookup
+  const approvedRequests = requests.filter(r => r.status === "Approved").map(r => ({
+    ...r,
+    email: r.providers?.email || providerEmailMap[r.provider_id] || null,
+    name: r.providers?.name || providers.find(p => p.id === r.provider_id)?.name || "Unknown",
+  })).filter(r => r.email);
+
   const requestList = approvedRequests.length > 0
     ? approvedRequests.map(r => {
         const endDate = new Date(r.end_date);
         const nextDay = new Date(endDate);
         nextDay.setDate(endDate.getDate() + 1);
         const nextDayStr = `${nextDay.getFullYear()}-${String(nextDay.getMonth()+1).padStart(2,"0")}-${String(nextDay.getDate()).padStart(2,"0")}`;
-        return `- ${r.providers?.name}: ${r.type} from ${r.start_date} to ${r.end_date} (BLOCKED on all these dates inclusive — first available date is ${nextDayStr})`;
+        return `- ${r.name} (${r.email}): ${r.type} from ${r.start_date} to ${r.end_date} — BLOCKED on ALL dates inclusive through ${r.end_date}. First available date is ${nextDayStr}.`;
       }).join("\n")
     : "No approved time-off requests.";
 
@@ -55,14 +66,14 @@ ${providerList}
 APPROVED TIME-OFF REQUESTS:
 ${requestList}
 
-IMPORTANT TIME-OFF RULE: A provider on time off from date A to date B is BLOCKED on ALL dates from A through B inclusive. They are NOT available on the last day of their time off. Their first available date is B+1 (the day AFTER their time off ends).
+IMPORTANT TIME-OFF RULE: The end date of time off is the LAST day the provider is OFF. They are NOT available on that date. Their FIRST available date is the day AFTER the end date.
 
-PREVIOUS MONTH CALL HISTORY (use this to ensure fairness continuity):
+PREVIOUS MONTH CALL HISTORY:
 ${previousCalls}
 
 FRIDAYS THIS MONTH: ${fridays.join(", ")}
 SATURDAYS THIS MONTH: ${saturdays.join(", ")}
-(Note: Sundays are automatically assigned to the same provider as Saturday — do NOT include Sundays in your output)
+(Sundays are automatically copied from Saturday — do NOT include Sundays in your output)
 
 STRICT CALL RULES:
 1. Each day needs exactly one provider on call
@@ -72,14 +83,13 @@ STRICT CALL RULES:
 5. Distribute Saturdays as evenly as possible across providers
 6. Distribute Fridays as evenly as possible across providers
 7. Minimum 3 weeks between weekend shifts (Fri OR Sat) for the same provider
-8. Respect all approved time-off requests — provider is blocked on ALL days including end date
+8. A provider on time off is BLOCKED on ALL days from start_date through end_date INCLUSIVE
 9. MAXIMIZE the gap between each provider's call shifts
 10. Balance total weekday calls fairly across all providers
 11. Do not assign a provider who had the last call of the previous month to the first day of this month
 
 CRITICAL: Use ONLY these exact email addresses: ${emailList}
-Do NOT invent or modify any emails.
-Do NOT include Sundays in the schedule — they are handled automatically.
+Do NOT include Sundays in the schedule.
 
 Respond ONLY with a valid JSON object, no explanation, no markdown:
 {
@@ -100,51 +110,58 @@ Respond ONLY with a valid JSON object, no explanation, no markdown:
     const clean = text.replace(/```json|```/g, "").trim();
     const result = JSON.parse(clean);
 
-    // ─── Enforce Saturday = Sunday rule in code ───────────────────────────────
     const schedule = { ...result.schedule };
+
+    // ─── Enforce Saturday = Sunday in code ───────────────────────────────────
     for (let d = 1; d <= daysInMonth; d++) {
       const date = new Date(year, month, d);
-      if (date.getDay() === 6) { // Saturday
+      if (date.getDay() === 6) {
         const satStr = `${year}-${String(month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
         const sunDate = new Date(year, month, d + 1);
         const sunStr = `${sunDate.getFullYear()}-${String(sunDate.getMonth()+1).padStart(2,"0")}-${String(sunDate.getDate()).padStart(2,"0")}`;
-        if (schedule[satStr]) {
-          schedule[sunStr] = schedule[satStr];
-        }
+        if (schedule[satStr]) schedule[sunStr] = schedule[satStr];
       }
     }
 
-    // ─── Enforce max 1 Saturday per provider per month in code ───────────────
+    // ─── Enforce max 1 Saturday per provider in code ─────────────────────────
     const satCounts = {};
     for (const satDate of saturdays) {
       const email = schedule[satDate];
       if (!email) continue;
       if (satCounts[email]) {
-        const usedEmails = Object.values(satCounts);
-        const available = providers.map(p => p.email).filter(e => !usedEmails.includes(e));
-        if (available.length > 0) {
-          schedule[satDate] = available[0];
+        const usedEmails = new Set(Object.keys(satCounts));
+        const available = providers.map(p => p.email).find(e => !usedEmails.has(e));
+        if (available) {
+          schedule[satDate] = available;
           const satD = parseInt(satDate.split("-")[2]);
           const sunDate = new Date(year, month, satD + 1);
           const sunStr = `${sunDate.getFullYear()}-${String(sunDate.getMonth()+1).padStart(2,"0")}-${String(sunDate.getDate()).padStart(2,"0")}`;
-          schedule[sunStr] = available[0];
+          schedule[sunStr] = available;
+          satCounts[available] = 1;
         }
       } else {
-        satCounts[email] = (satCounts[email] || 0) + 1;
+        satCounts[email] = 1;
       }
     }
 
     // ─── Enforce time-off blocks in code ─────────────────────────────────────
     for (const r of approvedRequests) {
-      const start = new Date(r.start_date);
-      const end = new Date(r.end_date);
-      const providerEmail = r.providers?.email || providers.find(p => p.id === r.provider_id)?.email;
-      if (!providerEmail) continue;
+      const start = new Date(r.start_date + "T00:00:00");
+      const end = new Date(r.end_date + "T00:00:00");
       for (let dt = new Date(start); dt <= end; dt.setDate(dt.getDate() + 1)) {
         const dateStr = `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,"0")}-${String(dt.getDate()).padStart(2,"0")}`;
-        if (schedule[dateStr] === providerEmail) {
-          // Find a replacement — pick any provider not on time off that day
-          const replacement = providers.find(p => p.email !== providerEmail);
+        if (schedule[dateStr] === r.email) {
+          // Replace with a provider not on time off that day
+          const replacement = providers.find(p => {
+            if (p.email === r.email) return false;
+            // Check this provider is not also on time off
+            return !approvedRequests.some(req => {
+              if (req.email !== p.email) return false;
+              const s = new Date(req.start_date + "T00:00:00");
+              const e = new Date(req.end_date + "T00:00:00");
+              return dt >= s && dt <= e;
+            });
+          });
           if (replacement) schedule[dateStr] = replacement.email;
         }
       }
