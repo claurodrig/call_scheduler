@@ -671,23 +671,50 @@ function AIScheduleGenerator() {
     setError(null);
   };
 
+  const [bulk, setBulk] = useState(false); // false = 1 month, true = 3 months
+
+  // The 3 months starting from selected month
+  const bulkMonths = (() => {
+    const result = [];
+    let y = year, m = month;
+    for (let i = 0; i < 3; i++) {
+      result.push({ year: y, month: m });
+      m++;
+      if (m > 11) { m = 0; y++; }
+    }
+    return result;
+  })();
+
+  // For bulk mode, check if ANY of the 3 months is blocked
+  const bulkBlockingMap = bulk
+    ? bulkMonths.map(({ year: y, month: m }) => ({ year: y, month: m, blocking: getBlockingMonths(y, m) }))
+    : [];
+  const bulkBlocked = bulkBlockingMap.some(b => b.blocking.length > 0);
+
   const handleGenerate = async () => {
-    if (isBlocked) return;
+    if (bulk ? bulkBlocked : isBlocked) return;
     setLoading(true);
     setError(null);
     setSummary(null);
     try {
       const [providers, requests] = await Promise.all([fetchProviders(), fetchRequests()]);
-      const previousSchedule = await fetchSchedule(month === 0 ? year - 1 : year, month === 0 ? 11 : month - 1);
-      const result = await generateSchedule({ providers, requests, year, month, previousSchedule });
-      await saveGeneratedSchedule(result.schedule, providers, year, month);
-      setSummary(result.summary);
-      // Re-check completeness after generating
-      const newData = await fetchSchedule(year, month);
-      setCompleteMonths(prev => ({
-        ...prev,
-        [`${year}-${month}`]: isMonthComplete(newData, year, month),
-      }));
+      const monthsToGenerate = bulk ? bulkMonths : [{ year, month }];
+      const summaries = [];
+
+      for (const { year: y, month: m } of monthsToGenerate) {
+        const previousSchedule = await fetchSchedule(m === 0 ? y - 1 : y, m === 0 ? 11 : m - 1);
+        const result = await generateSchedule({ providers, requests, year: y, month: m, previousSchedule });
+        await saveGeneratedSchedule(result.schedule, providers, y, m);
+        summaries.push(`${MONTHS[m]} ${y}: ${result.summary}`);
+        // Update completeness live as each month finishes
+        const newData = await fetchSchedule(y, m);
+        setCompleteMonths(prev => ({
+          ...prev,
+          [`${y}-${m}`]: isMonthComplete(newData, y, m),
+        }));
+      }
+
+      setSummary(summaries.join("\n\n"));
     } catch(err) {
       setError("Something went wrong. Please try again.");
       console.error(err);
@@ -705,6 +732,18 @@ function AIScheduleGenerator() {
       {checking
         ? <p style={{fontFamily:ffb, fontSize:12, color:C.sub, marginBottom:12}}>Checking schedule history…</p>
         : <>
+            {/* 1 month vs 3 months toggle */}
+            <div style={{display:"flex", background:"#FFF", borderRadius:8, padding:3, marginBottom:12, border:`1px solid ${C.grey}`}}>
+              {[["1 Month", false],["3 Months", true]].map(([label, val]) => (
+                <button key={label} onClick={() => { setBulk(val); setSummary(null); setError(null); }} style={{
+                  flex:1, padding:"8px", borderRadius:6, border:"none",
+                  fontFamily:ff, fontWeight:800, fontSize:12, cursor:"pointer",
+                  background: bulk === val ? C.teal : "transparent",
+                  color: bulk === val ? "#fff" : C.sub,
+                }}>{label}</button>
+              ))}
+            </div>
+
             <div style={{display:"flex", gap:8, marginBottom:10}}>
               {/* Month dropdown — disable months that are blocked */}
               <select
@@ -733,12 +772,29 @@ function AIScheduleGenerator() {
               </select>
             </div>
 
-            {/* Blocking warning */}
-            {isBlocked && (
-              <div style={{
-                padding:"10px 12px", borderRadius:8, marginBottom:12,
-                background:"#fff7ed", border:"1px solid #f59e0b"
-              }}>
+            {/* Bulk month preview chips */}
+            {bulk && (
+              <div style={{display:"flex", gap:6, marginBottom:12}}>
+                {bulkMonths.map(({ year: y, month: m }, i) => {
+                  const blocked = getBlockingMonths(y, m).length > 0;
+                  return (
+                    <div key={i} style={{
+                      flex:1, padding:"6px 8px", borderRadius:8, textAlign:"center",
+                      background: blocked ? "#fff7ed" : `${C.wave}88`,
+                      border: `1.5px solid ${blocked ? "#f59e0b" : C.teal}`,
+                    }}>
+                      <p style={{margin:0, fontFamily:ff, fontWeight:800, fontSize:11, color: blocked ? "#b45309" : C.teal}}>{MONTHS[m]}</p>
+                      <p style={{margin:"2px 0 0", fontFamily:ffb, fontSize:10, color: blocked ? "#b45309" : C.sub}}>{y}</p>
+                      {blocked && <p style={{margin:"2px 0 0", fontSize:10}}>⚠</p>}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Blocking warning — single month */}
+            {!bulk && isBlocked && (
+              <div style={{padding:"10px 12px", borderRadius:8, marginBottom:12, background:"#fff7ed", border:"1px solid #f59e0b"}}>
                 <p style={{margin:"0 0 4px", fontFamily:ff, fontWeight:800, fontSize:12, color:"#b45309"}}>
                   ⚠ Cannot generate {MONTHS[month]} {year}
                 </p>
@@ -753,19 +809,45 @@ function AIScheduleGenerator() {
               </div>
             )}
 
+            {/* Blocking warning — bulk */}
+            {bulk && bulkBlocked && (
+              <div style={{padding:"10px 12px", borderRadius:8, marginBottom:12, background:"#fff7ed", border:"1px solid #f59e0b"}}>
+                <p style={{margin:"0 0 4px", fontFamily:ff, fontWeight:800, fontSize:12, color:"#b45309"}}>
+                  ⚠ Some months in this range cannot be generated yet
+                </p>
+                {bulkBlockingMap.filter(b => b.blocking.length > 0).map(({ year: y, month: m, blocking }) => (
+                  <div key={`${y}-${m}`} style={{marginTop:6}}>
+                    <p style={{margin:"0 0 2px", fontFamily:ff, fontWeight:800, fontSize:11, color:"#b45309"}}>{MONTHS[m]} {y} requires:</p>
+                    {blocking.map(({ year: by, month: bm }) => (
+                      <p key={`${by}-${bm}`} style={{margin:"1px 0 1px 8px", fontFamily:ffb, fontSize:11, color:"#92400e"}}>
+                        · {MONTHS[bm]} {by} — incomplete
+                      </p>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            )}
+
             {summary && (
               <div style={{padding:"10px 12px", borderRadius:8, background:C.wave, border:`1px solid ${C.teal}`, marginBottom:12}}>
-                <p style={{margin:0, fontFamily:ffb, fontSize:12, color:C.text}}>{summary}</p>
+                {summary.split("\n\n").map((s, i) => (
+                  <p key={i} style={{margin: i > 0 ? "8px 0 0" : 0, fontFamily:ffb, fontSize:12, color:C.text}}>{s}</p>
+                ))}
               </div>
             )}
             {error && <p style={{fontFamily:ffb, fontSize:12, color:"#e05555", marginBottom:12}}>{error}</p>}
 
             <button
-              style={btnS({opacity: (loading || isBlocked) ? 0.5 : 1, cursor: isBlocked ? "not-allowed" : "pointer"})}
+              style={btnS({opacity: (loading || (bulk ? bulkBlocked : isBlocked)) ? 0.5 : 1, cursor: (bulk ? bulkBlocked : isBlocked) ? "not-allowed" : "pointer"})}
               onClick={handleGenerate}
-              disabled={loading || isBlocked}
+              disabled={loading || (bulk ? bulkBlocked : isBlocked)}
             >
-              {loading ? "Generating schedule..." : `Generate ${MONTHS[month]} ${year} Schedule`}
+              {loading
+                ? "Generating schedule..."
+                : bulk
+                  ? `Generate ${MONTHS[month]}–${MONTHS[bulkMonths[2].month]} ${year}${bulkMonths[2].year !== year ? "/"+bulkMonths[2].year : ""}`
+                  : `Generate ${MONTHS[month]} ${year} Schedule`
+              }
             </button>
           </>
       }
