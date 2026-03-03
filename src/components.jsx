@@ -554,23 +554,140 @@ export function MorePage({ onNav, currentProvider }) {
   );
 }
 
+// Returns the number of calendar days in a given year/month
+function daysInMonth(year, month) {
+  return new Date(year, month + 1, 0).getDate();
+}
+
+// Returns true if every calendar day in the month has a provider assigned
+function isMonthComplete(scheduleData, year, month) {
+  const total = daysInMonth(year, month);
+  for (let d = 1; d <= total; d++) {
+    const key = `${year}-${String(month + 1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+    if (!scheduleData[key]) return false;
+  }
+  return true;
+}
+
+// Returns a list of {year, month} from startYM up to (not including) targetYM
+function monthsBetween(startY, startM, endY, endM) {
+  const result = [];
+  let y = startY, m = startM;
+  while (y < endY || (y === endY && m < endM)) {
+    result.push({ year: y, month: m });
+    m++;
+    if (m > 11) { m = 0; y++; }
+  }
+  return result;
+}
+
 function AIScheduleGenerator() {
-  const [loading, setLoading] = useState(false);
-  const [summary, setSummary] = useState(null);
-  const [error, setError]     = useState(null);
-  const [month, setMonth]     = useState(10);
-  const [year, setYear]       = useState(2026);
+  const [loading, setLoading]         = useState(false);
+  const [checking, setChecking]       = useState(true);
+  const [summary, setSummary]         = useState(null);
+  const [error, setError]             = useState(null);
+  const [month, setMonth]             = useState(new Date().getMonth());
+  const [year, setYear]               = useState(new Date().getFullYear());
+  const [originYM, setOriginYM]       = useState(null);   // { year, month } of earliest scheduled month
+  const [completeMonths, setCompleteMonths] = useState({}); // "YYYY-M" -> true/false
+
+  // On mount: find the origin month (earliest month with ANY schedule data)
+  // then check completeness of every month from origin up to 12 months ahead
+  useEffect(() => {
+    async function init() {
+      setChecking(true);
+      const today = new Date();
+      const scanStart = { year: today.getFullYear() - 2, month: 0 };
+      const scanEnd   = { year: today.getFullYear() + 2, month: 11 };
+
+      // Collect all months to scan
+      const toScan = monthsBetween(scanStart.year, scanStart.month, scanEnd.year, scanEnd.month + 1);
+
+      // Fetch all in parallel
+      const results = await Promise.all(
+        toScan.map(({ year, month }) =>
+          fetchSchedule(year, month).then(data => ({ year, month, data }))
+        )
+      );
+
+      // Find origin: earliest month with at least 1 day assigned
+      let origin = null;
+      for (const { year, month, data } of results) {
+        if (Object.keys(data).length > 0) {
+          if (!origin || year < origin.year || (year === origin.year && month < origin.month)) {
+            origin = { year, month };
+          }
+        }
+      }
+
+      if (!origin) {
+        // No schedules exist at all — allow generating current month freely
+        setOriginYM(null);
+        setCompleteMonths({});
+        setChecking(false);
+        return;
+      }
+
+      setOriginYM(origin);
+
+      // Check completeness for every month from origin onwards
+      const completeness = {};
+      for (const { year, month, data } of results) {
+        const key = `${year}-${month}`;
+        completeness[key] = isMonthComplete(data, year, month);
+      }
+      setCompleteMonths(completeness);
+      setChecking(false);
+    }
+    init();
+  }, []);
+
+  // For a given target year/month, check if all months from origin up to (not including) target are complete
+  const getBlockingMonths = (targetYear, targetMonth) => {
+    if (!originYM) return []; // no origin = no restriction
+    const prior = monthsBetween(originYM.year, originYM.month, targetYear, targetMonth);
+    return prior.filter(({ year, month }) => {
+      const key = `${year}-${month}`;
+      return !completeMonths[key];
+    });
+  };
+
+  const selectedBlocking = getBlockingMonths(year, month);
+  const isBlocked = selectedBlocking.length > 0;
+
+  // Build year options: current year and next 2
+  const thisYear = new Date().getFullYear();
+  const yearOptions = [thisYear, thisYear + 1, thisYear + 2];
+
+  const handleYearChange = (newYear) => {
+    setYear(Number(newYear));
+    setSummary(null);
+    setError(null);
+  };
+
+  const handleMonthChange = (newMonth) => {
+    setMonth(Number(newMonth));
+    setSummary(null);
+    setError(null);
+  };
 
   const handleGenerate = async () => {
+    if (isBlocked) return;
     setLoading(true);
     setError(null);
     setSummary(null);
     try {
       const [providers, requests] = await Promise.all([fetchProviders(), fetchRequests()]);
-      const previousSchedule = await fetchSchedule(month===0?year-1:year, month===0?11:month-1);
+      const previousSchedule = await fetchSchedule(month === 0 ? year - 1 : year, month === 0 ? 11 : month - 1);
       const result = await generateSchedule({ providers, requests, year, month, previousSchedule });
       await saveGeneratedSchedule(result.schedule, providers, year, month);
       setSummary(result.summary);
+      // Re-check completeness after generating
+      const newData = await fetchSchedule(year, month);
+      setCompleteMonths(prev => ({
+        ...prev,
+        [`${year}-${month}`]: isMonthComplete(newData, year, month),
+      }));
     } catch(err) {
       setError("Something went wrong. Please try again.");
       console.error(err);
@@ -580,23 +697,78 @@ function AIScheduleGenerator() {
 
   return (
     <div style={card({padding:"14px"})}>
-      <p style={{margin:"0 0 6px", fontFamily:ff, fontWeight:800, fontSize:14, color:C.text}}>AI Schedule Generator</p>
-      <p style={{margin:"0 0 12px", fontFamily:ffb, fontSize:12, color:C.sub}}>Generate a fair call schedule using AI. Respects time-off requests, maximizes gaps between shifts, and balances calls evenly.</p>
-      <div style={{display:"flex", gap:8, marginBottom:12}}>
-        <select value={month} onChange={e=>setMonth(Number(e.target.value))} style={{...inpS, flex:1}}>
-          {MONTHS.map((m,i) => <option key={i} value={i}>{m}</option>)}
-        </select>
-        <input type="number" value={year} onChange={e=>setYear(Number(e.target.value))} style={{...inpS, width:80}} min={2026} max={2030}/>
-      </div>
-      {summary && (
-        <div style={{padding:"10px 12px", borderRadius:8, background:C.wave, border:`1px solid ${C.teal}`, marginBottom:12}}>
-          <p style={{margin:0, fontFamily:ffb, fontSize:12, color:C.text}}>{summary}</p>
-        </div>
-      )}
-      {error && <p style={{fontFamily:ffb, fontSize:12, color:"#e05555", marginBottom:12}}>{error}</p>}
-      <button style={btnS({opacity:loading?0.7:1})} onClick={handleGenerate} disabled={loading}>
-        {loading ? "Generating schedule..." : `Generate ${MONTHS[month]} ${year} Schedule`}
-      </button>
+      <p style={{margin:"0 0 4px", fontFamily:ff, fontWeight:800, fontSize:14, color:C.text}}>AI Schedule Generator</p>
+      <p style={{margin:"0 0 12px", fontFamily:ffb, fontSize:12, color:C.sub}}>
+        Generate a fair call schedule using AI. All prior months must be fully scheduled first to ensure accurate call parity tracking.
+      </p>
+
+      {checking
+        ? <p style={{fontFamily:ffb, fontSize:12, color:C.sub, marginBottom:12}}>Checking schedule history…</p>
+        : <>
+            <div style={{display:"flex", gap:8, marginBottom:10}}>
+              {/* Month dropdown — disable months that are blocked */}
+              <select
+                value={month}
+                onChange={e => handleMonthChange(e.target.value)}
+                style={{...inpS, flex:1}}
+              >
+                {MONTHS.map((m, i) => {
+                  const blocking = getBlockingMonths(year, i);
+                  const blocked  = blocking.length > 0;
+                  return (
+                    <option key={i} value={i} disabled={blocked}>
+                      {m}{blocked ? " ⚠ incomplete prior months" : ""}
+                    </option>
+                  );
+                })}
+              </select>
+
+              {/* Year dropdown */}
+              <select
+                value={year}
+                onChange={e => handleYearChange(e.target.value)}
+                style={{...inpS, width:90}}
+              >
+                {yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
+              </select>
+            </div>
+
+            {/* Blocking warning */}
+            {isBlocked && (
+              <div style={{
+                padding:"10px 12px", borderRadius:8, marginBottom:12,
+                background:"#fff7ed", border:"1px solid #f59e0b"
+              }}>
+                <p style={{margin:"0 0 4px", fontFamily:ff, fontWeight:800, fontSize:12, color:"#b45309"}}>
+                  ⚠ Cannot generate {MONTHS[month]} {year}
+                </p>
+                <p style={{margin:"0 0 6px", fontFamily:ffb, fontSize:11, color:"#92400e"}}>
+                  The following months must be fully completed first:
+                </p>
+                {selectedBlocking.map(({year: y, month: m}) => (
+                  <p key={`${y}-${m}`} style={{margin:"2px 0", fontFamily:ff, fontWeight:700, fontSize:11, color:"#b45309"}}>
+                    · {MONTHS[m]} {y} — incomplete
+                  </p>
+                ))}
+              </div>
+            )}
+
+            {summary && (
+              <div style={{padding:"10px 12px", borderRadius:8, background:C.wave, border:`1px solid ${C.teal}`, marginBottom:12}}>
+                <p style={{margin:0, fontFamily:ffb, fontSize:12, color:C.text}}>{summary}</p>
+              </div>
+            )}
+            {error && <p style={{fontFamily:ffb, fontSize:12, color:"#e05555", marginBottom:12}}>{error}</p>}
+
+            <button
+              style={btnS({opacity: (loading || isBlocked) ? 0.5 : 1, cursor: isBlocked ? "not-allowed" : "pointer"})}
+              onClick={handleGenerate}
+              disabled={loading || isBlocked}
+            >
+              {loading ? "Generating schedule..." : `Generate ${MONTHS[month]} ${year} Schedule`}
+            </button>
+          </>
+      }
     </div>
   );
 }
