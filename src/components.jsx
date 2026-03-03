@@ -1123,6 +1123,8 @@ export function AdminPage({ onBack }) {
           </div>
         ))}
       </>}
+
+      {tab === "schedule" && (
         <div>
           <div style={card({padding:"14px", marginBottom:10})}>
             <p style={{margin:"0 0 10px", fontFamily:ff, fontWeight:800, fontSize:14, color:C.text}}>October 2026</p>
