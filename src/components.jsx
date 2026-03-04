@@ -895,20 +895,20 @@ export function PrintSchedulePage({ onBack }) {
 
     return (
       <div className="print-page" key={`${year}-${month}`} style={{
-        width: "8.5in", minHeight: "11in", padding: "0.4in 0.4in 0.3in",
+        width: "11in", height: "8.5in", padding: "0.2in 0.3in 0.15in",
         boxSizing: "border-box", background: "#fff",
         fontFamily: ff, pageBreakAfter: "always",
         display: "flex", flexDirection: "column",
       }}>
         {/* Header */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.2in", borderBottom: "2px solid #1a8c78", paddingBottom: "0.1in" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.1in", borderBottom: "2px solid #1a8c78", paddingBottom: "0.07in" }}>
           {logoDataUrl
-            ? <img src={logoDataUrl} alt="Beaches OBGYN" style={{ height: 48, objectFit: "contain" }} />
-            : <span style={{ fontWeight: 900, fontSize: 20, color: "#1a8c78" }}>Beaches OBGYN</span>
+            ? <img src={logoDataUrl} alt="Beaches OBGYN" style={{ height: 36, objectFit: "contain" }} />
+            : <span style={{ fontWeight: 900, fontSize: 16, color: "#1a8c78" }}>Beaches OBGYN</span>
           }
           <div style={{ textAlign: "right" }}>
-            <p style={{ margin: 0, fontSize: 22, fontWeight: 900, color: "#1a3a35" }}>{monthName} {year}</p>
-            <p style={{ margin: 0, fontSize: 10, color: "#888" }}>Call Schedule</p>
+            <p style={{ margin: 0, fontSize: 18, fontWeight: 900, color: "#1a3a35" }}>{monthName} {year}</p>
+            <p style={{ margin: 0, fontSize: 9, color: "#888" }}>Call Schedule</p>
           </div>
         </div>
 
@@ -916,8 +916,8 @@ export function PrintSchedulePage({ onBack }) {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2, marginBottom: 2 }}>
           {["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map((d, i) => (
             <div key={d} style={{
-              textAlign: "center", padding: "4px 0",
-              fontSize: 10, fontWeight: 900,
+              textAlign: "center", padding: "3px 0",
+              fontSize: 9, fontWeight: 900,
               color: i === 0 || i === 6 ? "#e05c5c" : "#1a8c78",
               background: "#f0faf8", borderRadius: 3,
             }}>{d}</div>
@@ -927,7 +927,7 @@ export function PrintSchedulePage({ onBack }) {
         {/* Calendar grid */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2, flex: 1 }}>
           {cells.map((d, i) => {
-            if (!d) return <div key={i} style={{ background: "#fafafa", borderRadius: 4, minHeight: 80 }} />;
+            if (!d) return <div key={i} style={{ background: "#fafafa", borderRadius: 4 }} />;
             const dateKey = `${year}-${String(month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
             const prov = scheduleData?.[dateKey];
             const dow = (firstDay + d - 1) % 7;
@@ -937,26 +937,27 @@ export function PrintSchedulePage({ onBack }) {
               <div key={i} style={{
                 border: `1px solid ${prov ? prov.color + "55" : "#e8e8e8"}`,
                 borderTop: prov ? `3px solid ${prov.color}` : "3px solid #e8e8e8",
-                borderRadius: 4, padding: "4px 5px", minHeight: 80,
+                borderRadius: 4, padding: "3px 4px",
                 background: isWeekend ? "#fdf8f8" : "#fff",
-                display: "flex", flexDirection: "column",
+                display: "flex", flexDirection: "column", alignItems: "flex-start",
+                overflow: "hidden",
               }}>
                 <span style={{
-                  fontSize: 11, fontWeight: 800,
+                  fontSize: 10, fontWeight: 800,
                   color: isWeekend ? "#e05c5c" : "#1a3a35",
-                  marginBottom: 4,
+                  marginBottom: 2, lineHeight: 1,
                 }}>{d}</span>
                 {prov && <>
                   {prov.avatar_url
-                    ? <img src={prov.avatar_url} alt={prov.name} style={{ width: 28, height: 28, borderRadius: "50%", objectFit: "cover", marginBottom: 3, border: `2px solid ${prov.color}` }} />
+                    ? <img src={prov.avatar_url} alt={prov.name} style={{ width: 22, height: 22, borderRadius: "50%", objectFit: "cover", marginBottom: 2, border: `2px solid ${prov.color}` }} />
                     : <div style={{
-                        width: 28, height: 28, borderRadius: "50%",
-                        background: prov.color, marginBottom: 3,
+                        width: 22, height: 22, borderRadius: "50%",
+                        background: prov.color, marginBottom: 2, flexShrink: 0,
                         display: "flex", alignItems: "center", justifyContent: "center",
-                        fontSize: 10, fontWeight: 900, color: "#fff",
+                        fontSize: 8, fontWeight: 900, color: "#fff",
                       }}>{prov.initials}</div>
                   }
-                  <span style={{ fontSize: 9, fontWeight: 700, color: "#333", lineHeight: 1.3 }}>
+                  <span style={{ fontSize: 8, fontWeight: 700, color: "#333", lineHeight: 1.2, wordBreak: "break-word" }}>
                     {prov.name.replace("Dr. ", "")}
                   </span>
                 </>}
@@ -966,11 +967,11 @@ export function PrintSchedulePage({ onBack }) {
         </div>
 
         {/* Legend */}
-        <div style={{ marginTop: "0.1in", paddingTop: "0.1in", borderTop: "1px solid #e8e8e8", display: "flex", flexWrap: "wrap", gap: "8px 16px" }}>
+        <div style={{ marginTop: "0.07in", paddingTop: "0.06in", borderTop: "1px solid #e8e8e8", display: "flex", flexWrap: "wrap", gap: "4px 14px" }}>
           {providers.map(p => (
-            <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 5 }}>
-              <div style={{ width: 10, height: 10, borderRadius: "50%", background: p.color, flexShrink: 0 }} />
-              <span style={{ fontSize: 8, color: "#555", fontWeight: 600 }}>{p.name}</span>
+            <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <div style={{ width: 8, height: 8, borderRadius: "50%", background: p.color, flexShrink: 0 }} />
+              <span style={{ fontSize: 7.5, color: "#555", fontWeight: 600 }}>{p.name}</span>
             </div>
           ))}
         </div>
@@ -992,7 +993,10 @@ export function PrintSchedulePage({ onBack }) {
             top: 0; left: 0;
             width: 100%;
           }
-          @page { size: 8.5in 11in; margin: 0; }
+          @page {
+            size: 11in 8.5in landscape;
+            margin: 0;
+          }
         }
         #print-container { display: none; }
       `}</style>
