@@ -980,11 +980,18 @@ export function PrintSchedulePage({ onBack }) {
 
   return (
     <>
-      {/* Print styles — hidden during normal view, active when printing */}
+      {/* Print styles */}
       <style>{`
         @media print {
-          body > * { display: none !important; }
-          #print-container { display: block !important; }
+          html, body { margin: 0; padding: 0; background: #fff; }
+          body * { visibility: hidden; }
+          #print-container, #print-container * { visibility: visible; }
+          #print-container {
+            display: block !important;
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%;
+          }
           @page { size: 8.5in 11in; margin: 0; }
         }
         #print-container { display: none; }
