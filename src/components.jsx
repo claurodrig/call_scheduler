@@ -1272,9 +1272,12 @@ function AIScheduleGenerator() {
 
   // For a given target year/month, check if all months from origin up to (not including) target are complete
   const getBlockingMonths = (targetYear, targetMonth) => {
-    if (!originYM) return []; // no origin = no restriction
+    if (!originYM) return [];
+    const today = new Date();
     const prior = monthsBetween(originYM.year, originYM.month, targetYear, targetMonth);
     return prior.filter(({ year, month }) => {
+      // Current month: if it has any data at all, don't block future generation
+      if (year === today.getFullYear() && month === today.getMonth()) return false;
       const key = `${year}-${month}`;
       return !completeMonths[key];
     });
@@ -1313,11 +1316,17 @@ function AIScheduleGenerator() {
     return result;
   })();
 
-  // For bulk mode, check if ANY of the 3 months is blocked
+  // For bulk mode, find which months can actually be generated (up to first blocked)
   const bulkBlockingMap = bulk
     ? bulkMonths.map(({ year: y, month: m }) => ({ year: y, month: m, blocking: getBlockingMonths(y, m) }))
     : [];
-  const bulkBlocked = bulkBlockingMap.some(b => b.blocking.length > 0);
+  // Find how many months from the start are generatable (stop before first blocked)
+  const generatableMonths = [];
+  for (const b of bulkBlockingMap) {
+    if (b.blocking.length > 0) break;
+    generatableMonths.push({ year: b.year, month: b.month });
+  }
+  const bulkBlocked = generatableMonths.length === 0;
 
   const handleGenerate = async () => {
     if (bulk ? bulkBlocked : isBlocked) return;
@@ -1326,7 +1335,7 @@ function AIScheduleGenerator() {
     setSummary(null);
     try {
       const [providers, requests] = await Promise.all([fetchProviders(), fetchRequests()]);
-      const monthsToGenerate = bulk ? bulkMonths : [{ year, month }];
+      const monthsToGenerate = bulk ? generatableMonths : [{ year, month }];
       const summaries = [];
 
       // Fetch full history — all months from 12 months back up to current
@@ -1454,7 +1463,16 @@ function AIScheduleGenerator() {
               </div>
             )}
 
-            {/* Blocking warning — bulk */}
+            {/* Partial warning — bulk can generate some months */}
+            {bulk && !bulkBlocked && generatableMonths.length < bulkMonths.length && (
+              <div style={{padding:"10px 12px", borderRadius:8, marginBottom:12, background:"#f0fdf4", border:"1px solid #86efac"}}>
+                <p style={{margin:0, fontFamily:ff, fontWeight:800, fontSize:12, color:"#166534"}}>
+                  ✓ Will generate {generatableMonths.map(m => MONTHS[m.month]).join(", ")} — remaining months unlock after
+                </p>
+              </div>
+            )}
+
+            {/* Blocking warning — bulk, all blocked */}
             {bulk && bulkBlocked && (
               <div style={{padding:"10px 12px", borderRadius:8, marginBottom:12, background:"#fff7ed", border:"1px solid #f59e0b"}}>
                 <p style={{margin:"0 0 4px", fontFamily:ff, fontWeight:800, fontSize:12, color:"#b45309"}}>
@@ -1489,9 +1507,11 @@ function AIScheduleGenerator() {
             >
               {loading
                 ? "Generating schedule..."
-                : bulk
-                  ? `Generate ${MONTHS[month]}–${MONTHS[bulkMonths[2].month]} ${year}${bulkMonths[2].year !== year ? "/"+bulkMonths[2].year : ""}`
-                  : `Generate ${MONTHS[month]} ${year} Schedule`
+                : bulk && generatableMonths.length > 0
+                  ? `Generate ${MONTHS[generatableMonths[0].month]}${generatableMonths.length > 1 ? "–"+MONTHS[generatableMonths[generatableMonths.length-1].month] : ""} ${year}`
+                  : bulk
+                    ? `Generate ${MONTHS[month]}–${MONTHS[bulkMonths[2].month]} ${year}`
+                    : `Generate ${MONTHS[month]} ${year} Schedule`
               }
             </button>
           </>

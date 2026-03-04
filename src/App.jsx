@@ -126,20 +126,18 @@ export default function App() {
       <div style={{flex:1, overflowY:"auto", padding:"14px 14px 80px"}}>
         {renderBody()}
       </div>
-      {!sub && (
-        <div style={{position:"fixed", bottom:0, left:"50%", transform:"translateX(-50%)", width:"100%", maxWidth:430, height:60, background:"#FFF", display:"flex", alignItems:"center", borderTop:`1px solid ${C.grey}`, paddingBottom:"env(safe-area-inset-bottom)"}}>
+      <div style={{position:"fixed", bottom:0, left:"50%", transform:"translateX(-50%)", width:"100%", maxWidth:430, height:60, background:"#FFF", display:"flex", alignItems:"center", borderTop:`1px solid ${C.grey}`, paddingBottom:"env(safe-area-inset-bottom)", zIndex:50}}>
           {NAV.map(([key,label,Icon]) => {
             const active = tab===key;
             const color  = active ? C.teal : C.greyMid;
             return (
-              <button key={key} onClick={()=>setTab(key)} style={{flex:1, background:"none", border:"none", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:3, padding:"6px 0"}}>
+              <button key={key} onClick={()=>{ setTab(key); setSub(null); }} style={{flex:1, background:"none", border:"none", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:3, padding:"6px 0"}}>
                 <Icon color={color}/>
                 <span style={{fontFamily:ff, fontWeight:active?800:500, fontSize:10, color}}>{label}</span>
               </button>
             );
           })}
         </div>
-      )}
     </div>
   );
 }
