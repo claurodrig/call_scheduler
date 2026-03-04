@@ -1,7 +1,0 @@
-{
-  "rewrites": [
-    { "source": "/api/admin-invite", "destination": "/api/admin-invite.cjs" },
-    { "source": "/api/admin-reset-password", "destination": "/api/admin-reset-password.cjs" },
-    { "source": "/api/admin-update-role", "destination": "/api/admin-update-role.cjs" }
-  ]
-}
