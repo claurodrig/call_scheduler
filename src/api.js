@@ -21,15 +21,42 @@ export async function fetchSchedule(year, month) {
 }
 
 export async function fetchRequests(providerId = null) {
-  let query = supabase.from("requests").select("*, providers(id, name, initials, color, email, avatar_url)").order("created_at", { ascending: false });
+  let query = supabase
+    .from("requests")
+    .select("*, providers(id, name, initials, color, email, avatar_url)")
+    .order("created_at", { ascending: false });
   if (providerId) query = query.eq("provider_id", providerId);
   const { data, error } = await query;
   if (error) console.error("fetchRequests:", error);
   return data || [];
 }
 
-export async function submitRequest({ providerId, type, startDate, endDate, notes }) {
-  const { data, error } = await supabase.from("requests").insert({ provider_id: providerId, type, start_date: startDate, end_date: endDate, notes, status: "Pending" }).select().single();
+// Fetch switch requests where the current provider is the target (incoming requests)
+export async function fetchIncomingSwitchRequests(providerId) {
+  const { data, error } = await supabase
+    .from("requests")
+    .select("*, providers(id, name, initials, color, email, avatar_url)")
+    .eq("type", "Call Switch")
+    .eq("target_provider_id", providerId)
+    .eq("status", "Pending")
+    .order("created_at", { ascending: false });
+  if (error) console.error("fetchIncomingSwitchRequests:", error);
+  return data || [];
+}
+
+export async function submitRequest({ providerId, type, startDate, endDate, notes, targetProviderId = null }) {
+  const { data, error } = await supabase
+    .from("requests")
+    .insert({
+      provider_id: providerId,
+      type,
+      start_date: startDate,
+      end_date: endDate,
+      notes,
+      status: "Pending",
+      target_provider_id: targetProviderId,
+    })
+    .select().single();
   if (error) console.error("submitRequest:", error);
   return { data, error };
 }
@@ -94,7 +121,10 @@ export async function saveGeneratedSchedule(scheduleMap, providers, year, month)
 }
 
 export async function fetchNoCallDayRequests(providerId = null) {
-  let query = supabase.from("no_call_day_requests").select("*, providers(id, name, initials, color, email, avatar_url)").order("created_at", { ascending: false });
+  let query = supabase
+    .from("no_call_day_requests")
+    .select("*, providers(id, name, initials, color, email, avatar_url)")
+    .order("created_at", { ascending: false });
   if (providerId) query = query.eq("provider_id", providerId);
   const { data, error } = await query;
   if (error) console.error("fetchNoCallDayRequests:", error);
@@ -102,7 +132,10 @@ export async function fetchNoCallDayRequests(providerId = null) {
 }
 
 export async function submitNoCallDayRequest({ providerId, requestedDay, notes }) {
-  const { data, error } = await supabase.from("no_call_day_requests").insert({ provider_id: providerId, requested_day: requestedDay, notes, status: "Pending" }).select().single();
+  const { data, error } = await supabase
+    .from("no_call_day_requests")
+    .insert({ provider_id: providerId, requested_day: requestedDay, notes, status: "Pending" })
+    .select().single();
   if (error) console.error("submitNoCallDayRequest:", error);
   return { data, error };
 }

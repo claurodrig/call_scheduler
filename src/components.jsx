@@ -4,7 +4,7 @@ import {
   ff, ffb, dkey, getDays, getFirst,
   card, btnS, oBtnS, inpS, lblS, badge
 } from "./data";
-import { fetchSchedule, fetchProviders, fetchRequests, submitRequest, updateRequestStatus, fetchMessages, sendMessage, generateSchedule, saveGeneratedSchedule, cancelRequest, fetchNoCallDayRequests, submitNoCallDayRequest, updateNoCallDayStatus } from "./api";
+import { fetchSchedule, fetchProviders, fetchRequests, submitRequest, updateRequestStatus, fetchMessages, sendMessage, generateSchedule, saveGeneratedSchedule, cancelRequest, fetchNoCallDayRequests, submitNoCallDayRequest, updateNoCallDayStatus, fetchIncomingSwitchRequests } from "./api";
 import { supabase } from "./supabase";
 
 export function IcoHome({color}) {
@@ -323,12 +323,15 @@ export function RequestPage({ currentProvider }) {
   const [noCallDone, setNoCallDone]       = useState(false);
   const [noCallLoading, setNoCallLoading] = useState(false);
 
+  const [incomingSwitch, setIncomingSwitch] = useState([]);
+
   const DAYS = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
 
   useEffect(() => {
     if (!currentProvider) return;
     fetchRequests(currentProvider.id).then(setMyReqs);
     fetchNoCallDayRequests(currentProvider.id).then(setNoCallReqs);
+    fetchIncomingSwitchRequests(currentProvider.id).then(setIncomingSwitch);
   }, [currentProvider]);
 
   const opts = [
@@ -371,6 +374,60 @@ export function RequestPage({ currentProvider }) {
     return badge(status);
   };
 
+  const [switchDate, setSwitchDate]       = useState("");
+  const [switchSchedule, setSwitchSchedule] = useState({});
+  const [switchLoading, setSwitchLoading] = useState(false);
+
+  // Load schedule for next 3 months when Call Switch is selected
+  useEffect(() => {
+    if (type !== "Call Switch") return;
+    setSwitchLoading(true);
+    const now = new Date();
+    const months = [];
+    for (let i = 0; i < 3; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+      months.push({ year: d.getFullYear(), month: d.getMonth() });
+    }
+    Promise.all(months.map(({ year, month }) =>
+      fetchSchedule(year, month).then(data => ({ year, month, data }))
+    )).then(results => {
+      const merged = {};
+      results.forEach(({ data }) => Object.assign(merged, data));
+      setSwitchSchedule(merged);
+      setSwitchLoading(false);
+    });
+  }, [type]);
+
+  // Find dates where currentProvider is on call (next 3 months)
+  const myCallDates = Object.entries(switchSchedule)
+    .filter(([, p]) => p?.id === currentProvider?.id)
+    .map(([date]) => date)
+    .filter(date => new Date(date + "T00:00:00") >= new Date())
+    .sort();
+
+  const switchProviderOnDate = switchDate ? switchSchedule[switchDate] : null;
+
+  const handleSwitchSubmit = async () => {
+    if (!switchDate || !currentProvider) return;
+    setLoading(true);
+    const otherProvider = switchSchedule[switchDate];
+    const { error } = await submitRequest({
+      providerId: currentProvider.id,
+      type: "Call Switch",
+      startDate: switchDate,
+      endDate: switchDate,
+      notes: `Requesting switch with ${otherProvider?.name || "Unassigned"} on ${switchDate}`,
+      targetProviderId: otherProvider?.id || null,
+    });
+    if (!error) {
+      setDone(true);
+      setSwitchDate("");
+      fetchRequests(currentProvider.id).then(setMyReqs);
+      setTimeout(() => setDone(false), 2500);
+    }
+    setLoading(false);
+  };
+
   return (
     <div style={{ paddingBottom: 20 }}>
       <div style={{ display: "flex", background: "#FFF", borderRadius: 8, padding: 3, marginBottom: 16, border: `1px solid ${C.grey}` }}>
@@ -389,19 +446,9 @@ export function RequestPage({ currentProvider }) {
       </div>
 
       {tab === "new" && <>
-        <div style={card({ padding: "14px", marginBottom: 12, display: "flex", gap: 10, alignItems: "center" })}>
-          <div style={{ flex: 1 }}>
-            <span style={lblS}>Start</span>
-            <input type="date" value={start} onChange={e => setStart(e.target.value)} style={inpS} />
-          </div>
-          <span style={{ fontSize: 18, color: C.teal, marginTop: 16 }}>→</span>
-          <div style={{ flex: 1 }}>
-            <span style={lblS}>End</span>
-            <input type="date" value={end} onChange={e => setEnd(e.target.value)} style={inpS} />
-          </div>
-        </div>
+        {/* Type selector */}
         {opts.map(([title, sub]) => (
-          <div key={title} onClick={() => setType(title)} style={card({
+          <div key={title} onClick={() => { setType(title); setSwitchDate(""); setStart(""); setEnd(""); }} style={card({
             padding: "13px 16px", marginBottom: 10, cursor: "pointer",
             border: `1.5px solid ${type === title ? C.teal : C.grey}`,
             background: type === title ? `${C.wave}55` : "#FFF",
@@ -421,40 +468,179 @@ export function RequestPage({ currentProvider }) {
             </div>
           </div>
         ))}
+
+        {/* Days Off / Off Call Only — date range pickers */}
+        {type !== "Call Switch" && (
+          <div style={card({ padding: "14px", marginBottom: 12, display: "flex", gap: 10, alignItems: "center" })}>
+            <div style={{ flex: 1 }}>
+              <span style={lblS}>Start</span>
+              <input type="date" value={start} onChange={e => setStart(e.target.value)} style={inpS} />
+            </div>
+            <span style={{ fontSize: 18, color: C.teal, marginTop: 16 }}>→</span>
+            <div style={{ flex: 1 }}>
+              <span style={lblS}>End</span>
+              <input type="date" value={end} onChange={e => setEnd(e.target.value)} style={inpS} />
+            </div>
+          </div>
+        )}
+
+        {/* Call Switch — show provider's on-call dates */}
+        {type === "Call Switch" && (
+          <div style={card({ padding: "14px", marginBottom: 12 })}>
+            <p style={{ margin: "0 0 10px", fontFamily: ff, fontWeight: 800, fontSize: 13, color: C.text }}>
+              Your On-Call Dates
+            </p>
+            <p style={{ margin: "0 0 12px", fontFamily: ffb, fontSize: 11, color: C.sub }}>
+              Select a date you are scheduled for call to request a switch.
+            </p>
+            {switchLoading
+              ? <p style={{ fontFamily: ffb, fontSize: 12, color: C.sub, textAlign: "center", padding: "10px 0" }}>Loading your call dates…</p>
+              : myCallDates.length === 0
+                ? <p style={{ fontFamily: ffb, fontSize: 12, color: C.sub, textAlign: "center", padding: "10px 0" }}>No upcoming call dates found in the next 3 months.</p>
+                : <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {myCallDates.map(date => {
+                      const d = new Date(date + "T00:00:00");
+                      const isSelected = switchDate === date;
+                      const provOnDate = switchSchedule[date];
+                      return (
+                        <div key={date} onClick={() => setSwitchDate(isSelected ? "" : date)} style={{
+                          padding: "10px 14px", borderRadius: 8, cursor: "pointer",
+                          border: `1.5px solid ${isSelected ? C.teal : C.grey}`,
+                          background: isSelected ? `${C.wave}88` : "#FFF",
+                        }}>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                            <div>
+                              <p style={{ margin: 0, fontFamily: ff, fontWeight: 800, fontSize: 13, color: isSelected ? C.teal : C.text }}>
+                                {d.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric", year: "numeric" })}
+                              </p>
+                            </div>
+                            <div style={{
+                              width: 20, height: 20, borderRadius: "50%", flexShrink: 0,
+                              border: `2px solid ${isSelected ? C.teal : C.greyMid}`,
+                              background: isSelected ? C.teal : "transparent",
+                              display: "flex", alignItems: "center", justifyContent: "center",
+                            }}>
+                              {isSelected && <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#fff" }} />}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+            }
+
+            {/* Show who is on call on the selected date — for context, not a swap target */}
+            {switchDate && (
+              <div style={{
+                marginTop: 14, padding: "12px 14px", borderRadius: 8,
+                background: `${C.wave}88`, border: `1px solid ${C.teal}33`
+              }}>
+                <p style={{ margin: "0 0 8px", fontFamily: ff, fontWeight: 700, fontSize: 11, color: C.sub, textTransform: "uppercase", letterSpacing: 1 }}>
+                  You are on call on this date
+                </p>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  {currentProvider && <Avatar p={currentProvider} size={36} ring />}
+                  <div>
+                    <p style={{ margin: 0, fontFamily: ff, fontWeight: 800, fontSize: 13, color: C.text }}>{currentProvider?.name}</p>
+                    <p style={{ margin: "2px 0 0", fontFamily: ffb, fontSize: 11, color: C.sub }}>Requesting to be relieved of this call</p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {done
           ? <div style={{ padding: 13, borderRadius: 8, textAlign: "center", background: C.wave, border: `1.5px solid ${C.teal}` }}>
               <span style={{ fontFamily: ff, fontWeight: 900, fontSize: 14, color: C.teal }}>Request Submitted!</span>
             </div>
-          : <button style={btnS({ opacity: loading ? 0.7 : 1 })} onClick={handleSubmit} disabled={loading}>
+          : <button
+              style={btnS({ opacity: (loading || (type === "Call Switch" ? !switchDate : (!start || !end))) ? 0.6 : 1 })}
+              onClick={type === "Call Switch" ? handleSwitchSubmit : handleSubmit}
+              disabled={loading || (type === "Call Switch" ? !switchDate : (!start || !end))}
+            >
               {loading ? "Submitting..." : "Submit Request"}
             </button>
         }
       </>}
 
-      {tab === "mine" && myReqs.map(r => {
-        const canCancel = new Date(r.start_date) > new Date();
-        return (
-          <div key={r.id} style={card({ padding: "13px 16px", marginBottom: 10 })}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: canCancel ? 10 : 0 }}>
-              <div>
-                <p style={{ margin: 0, fontFamily: ff, fontWeight: 800, fontSize: 14, color: C.text }}>{r.type}</p>
-                <p style={{ margin: "3px 0 0", fontFamily: ffb, fontSize: 12, color: C.sub }}>{r.start_date} → {r.end_date}</p>
-              </div>
-              <span style={badge(r.status)}>{r.status}</span>
-            </div>
-            {canCancel && (
-              <button
-                style={oBtnS({ width: "100%", padding: "8px", fontSize: 12, color: C.coral, borderColor: C.coral })}
-                onClick={async () => {
-                  const ok = await cancelRequest(r.id);
-                  if (ok) fetchRequests(currentProvider.id).then(setMyReqs);
-                }}>
-                Cancel Request
-              </button>
-            )}
+      {tab === "mine" && <>
+        {/* Incoming switch requests — needs provider's approval */}
+        {incomingSwitch.length > 0 && <>
+          <div style={{ padding: "8px 12px", borderRadius: 8, marginBottom: 10, background: "#fff7ed", border: "1px solid #f59e0b" }}>
+            <p style={{ margin: 0, fontFamily: ff, fontWeight: 800, fontSize: 12, color: "#b45309" }}>
+              ⇄ Incoming Switch Requests — Your Approval Needed
+            </p>
           </div>
-        );
-      })}
+          {incomingSwitch.map(r => (
+            <div key={r.id} style={card({ padding: "13px 16px", marginBottom: 10, borderLeft: `3px solid #f59e0b` })}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                {r.providers && <Avatar p={r.providers} size={36} ring />}
+                <div style={{ flex: 1 }}>
+                  <p style={{ margin: 0, fontFamily: ff, fontWeight: 800, fontSize: 13, color: C.text }}>
+                    {r.providers?.name}
+                  </p>
+                  <p style={{ margin: "2px 0 0", fontFamily: ffb, fontSize: 11, color: C.sub }}>
+                    Wants to switch call on {new Date(r.start_date + "T00:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" })}
+                  </p>
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  style={btnS({ flex: 1, padding: "9px", fontSize: 12, background: "#65b896" })}
+                  onClick={async () => {
+                    await updateRequestStatus(r.id, "Approved");
+                    fetchIncomingSwitchRequests(currentProvider.id).then(setIncomingSwitch);
+                  }}
+                >
+                  Accept
+                </button>
+                <button
+                  style={btnS({ flex: 1, padding: "9px", fontSize: 12, background: C.coral })}
+                  onClick={async () => {
+                    await updateRequestStatus(r.id, "Denied");
+                    fetchIncomingSwitchRequests(currentProvider.id).then(setIncomingSwitch);
+                  }}
+                >
+                  Decline
+                </button>
+              </div>
+            </div>
+          ))}
+          <div style={{ height: 1, background: C.grey, marginBottom: 14 }} />
+        </>}
+
+        {/* My outgoing requests */}
+        {myReqs.length === 0 && incomingSwitch.length === 0 && (
+          <div style={card({ padding: "20px", textAlign: "center" })}>
+            <p style={{ fontFamily: ff, fontSize: 13, color: C.sub, margin: 0 }}>No requests yet</p>
+          </div>
+        )}
+        {myReqs.map(r => {
+          const canCancel = new Date(r.start_date) > new Date();
+          return (
+            <div key={r.id} style={card({ padding: "13px 16px", marginBottom: 10 })}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: canCancel ? 10 : 0 }}>
+                <div>
+                  <p style={{ margin: 0, fontFamily: ff, fontWeight: 800, fontSize: 14, color: C.text }}>{r.type}</p>
+                  <p style={{ margin: "3px 0 0", fontFamily: ffb, fontSize: 12, color: C.sub }}>{r.start_date} → {r.end_date}</p>
+                </div>
+                <span style={badge(r.status)}>{r.status}</span>
+              </div>
+              {canCancel && (
+                <button
+                  style={oBtnS({ width: "100%", padding: "8px", fontSize: 12, color: C.coral, borderColor: C.coral })}
+                  onClick={async () => {
+                    const ok = await cancelRequest(r.id);
+                    if (ok) fetchRequests(currentProvider.id).then(setMyReqs);
+                  }}>
+                  Cancel Request
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </>}})}
 
       {tab === "nocall" && <>
         <div style={card({ padding: "12px 14px", marginBottom: 14, background: `${C.wave}88`, border: `1px solid ${C.teal}33` })}>
