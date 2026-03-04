@@ -805,6 +805,262 @@ export function RequestPage({ currentProvider }) {
   );
 }
 
+export function IcoPrint({color}) {
+  return (
+    <svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+      <path d="M6 9V2h12v7" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"/>
+      <rect x={6} y={14} width={12} height={8} rx={1} stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"/>
+      <circle cx={18} cy={11.5} r={1} fill={color}/>
+    </svg>
+  );
+}
+
+export function PrintSchedulePage({ onBack }) {
+  const today = new Date();
+  const [selectedMonths, setSelectedMonths] = useState([
+    { year: today.getFullYear(), month: today.getMonth() }
+  ]);
+  const [schedules, setSchedules] = useState({});
+  const [providers, setProviders] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [logoDataUrl, setLogoDataUrl] = useState(null);
+
+  // Build list of month options: 6 months back, 12 months forward
+  const monthOptions = [];
+  for (let i = -6; i <= 12; i++) {
+    const d = new Date(today.getFullYear(), today.getMonth() + i, 1);
+    monthOptions.push({ year: d.getFullYear(), month: d.getMonth() });
+  }
+
+  const toggleMonth = (year, month) => {
+    const key = `${year}-${month}`;
+    setSelectedMonths(prev => {
+      const exists = prev.find(m => m.year === year && m.month === month);
+      if (exists) return prev.filter(m => !(m.year === year && m.month === month));
+      return [...prev, { year, month }].sort((a, b) => a.year !== b.year ? a.year - b.year : a.month - b.month);
+    });
+  };
+
+  const isSelected = (year, month) => !!selectedMonths.find(m => m.year === year && m.month === month);
+
+  // Load logo as base64 for print
+  useEffect(() => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = img.width;
+      canvas.height = img.height;
+      canvas.getContext("2d").drawImage(img, 0, 0);
+      setLogoDataUrl(canvas.toDataURL("image/png"));
+    };
+    img.src = "/logo.png";
+  }, []);
+
+  useEffect(() => {
+    fetchProviders().then(setProviders);
+  }, []);
+
+  const handlePrint = async () => {
+    if (selectedMonths.length === 0) return;
+    setLoading(true);
+
+    // Fetch all selected months
+    const results = await Promise.all(
+      selectedMonths.map(({ year, month }) =>
+        fetchSchedule(year, month).then(data => ({ year, month, data }))
+      )
+    );
+    const merged = {};
+    results.forEach(({ year, month, data }) => {
+      merged[`${year}-${month}`] = data;
+    });
+    setSchedules(merged);
+    setLoading(false);
+
+    // Wait for render then print
+    setTimeout(() => window.print(), 300);
+  };
+
+  const renderCalendar = (year, month, scheduleData) => {
+    const monthName = MONTHS[month];
+    const days = getDays(year, month);
+    const firstDay = getFirst(year, month);
+    const cells = [];
+    for (let i = 0; i < firstDay; i++) cells.push(null);
+    for (let d = 1; d <= days; d++) cells.push(d);
+    // Pad to complete last row
+    while (cells.length % 7 !== 0) cells.push(null);
+
+    return (
+      <div className="print-page" key={`${year}-${month}`} style={{
+        width: "8.5in", minHeight: "11in", padding: "0.4in 0.4in 0.3in",
+        boxSizing: "border-box", background: "#fff",
+        fontFamily: ff, pageBreakAfter: "always",
+        display: "flex", flexDirection: "column",
+      }}>
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.2in", borderBottom: "2px solid #1a8c78", paddingBottom: "0.1in" }}>
+          {logoDataUrl
+            ? <img src={logoDataUrl} alt="Beaches OBGYN" style={{ height: 48, objectFit: "contain" }} />
+            : <span style={{ fontWeight: 900, fontSize: 20, color: "#1a8c78" }}>Beaches OBGYN</span>
+          }
+          <div style={{ textAlign: "right" }}>
+            <p style={{ margin: 0, fontSize: 22, fontWeight: 900, color: "#1a3a35" }}>{monthName} {year}</p>
+            <p style={{ margin: 0, fontSize: 10, color: "#888" }}>Call Schedule</p>
+          </div>
+        </div>
+
+        {/* Day headers */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2, marginBottom: 2 }}>
+          {["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map((d, i) => (
+            <div key={d} style={{
+              textAlign: "center", padding: "4px 0",
+              fontSize: 10, fontWeight: 900,
+              color: i === 0 || i === 6 ? "#e05c5c" : "#1a8c78",
+              background: "#f0faf8", borderRadius: 3,
+            }}>{d}</div>
+          ))}
+        </div>
+
+        {/* Calendar grid */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2, flex: 1 }}>
+          {cells.map((d, i) => {
+            if (!d) return <div key={i} style={{ background: "#fafafa", borderRadius: 4, minHeight: 80 }} />;
+            const dateKey = `${year}-${String(month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+            const prov = scheduleData?.[dateKey];
+            const dow = (firstDay + d - 1) % 7;
+            const isWeekend = dow === 0 || dow === 6;
+
+            return (
+              <div key={i} style={{
+                border: `1px solid ${prov ? prov.color + "55" : "#e8e8e8"}`,
+                borderTop: prov ? `3px solid ${prov.color}` : "3px solid #e8e8e8",
+                borderRadius: 4, padding: "4px 5px", minHeight: 80,
+                background: isWeekend ? "#fdf8f8" : "#fff",
+                display: "flex", flexDirection: "column",
+              }}>
+                <span style={{
+                  fontSize: 11, fontWeight: 800,
+                  color: isWeekend ? "#e05c5c" : "#1a3a35",
+                  marginBottom: 4,
+                }}>{d}</span>
+                {prov && <>
+                  {prov.avatar_url
+                    ? <img src={prov.avatar_url} alt={prov.name} style={{ width: 28, height: 28, borderRadius: "50%", objectFit: "cover", marginBottom: 3, border: `2px solid ${prov.color}` }} />
+                    : <div style={{
+                        width: 28, height: 28, borderRadius: "50%",
+                        background: prov.color, marginBottom: 3,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: 10, fontWeight: 900, color: "#fff",
+                      }}>{prov.initials}</div>
+                  }
+                  <span style={{ fontSize: 9, fontWeight: 700, color: "#333", lineHeight: 1.3 }}>
+                    {prov.name.replace("Dr. ", "")}
+                  </span>
+                </>}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Legend */}
+        <div style={{ marginTop: "0.1in", paddingTop: "0.1in", borderTop: "1px solid #e8e8e8", display: "flex", flexWrap: "wrap", gap: "8px 16px" }}>
+          {providers.map(p => (
+            <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 5 }}>
+              <div style={{ width: 10, height: 10, borderRadius: "50%", background: p.color, flexShrink: 0 }} />
+              <span style={{ fontSize: 8, color: "#555", fontWeight: 600 }}>{p.name}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <>
+      {/* Print styles — hidden during normal view, active when printing */}
+      <style>{`
+        @media print {
+          body > * { display: none !important; }
+          #print-container { display: block !important; }
+          @page { size: 8.5in 11in; margin: 0; }
+        }
+        #print-container { display: none; }
+      `}</style>
+
+      {/* Print output container */}
+      <div id="print-container">
+        {selectedMonths.map(({ year, month }) =>
+          renderCalendar(year, month, schedules[`${year}-${month}`] || {})
+        )}
+      </div>
+
+      {/* UI */}
+      <div style={{ paddingBottom: 20 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+          <button onClick={onBack} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", color: C.primary }}>‹</button>
+          <span style={{ fontFamily: ff, fontWeight: 900, fontSize: 16, color: C.text }}>Print Schedule</span>
+        </div>
+
+        <div style={card({ padding: "12px 14px", marginBottom: 14, background: `${C.wave}88`, border: `1px solid ${C.teal}33` })}>
+          <p style={{ margin: 0, fontFamily: ff, fontWeight: 800, fontSize: 13, color: C.teal }}>Select Months to Print</p>
+          <p style={{ margin: "4px 0 0", fontFamily: ffb, fontSize: 12, color: C.sub }}>Each month prints as a full 8.5×11 page. Select one or more.</p>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
+          {monthOptions.map(({ year, month }) => {
+            const sel = isSelected(year, month);
+            const isCurrent = year === today.getFullYear() && month === today.getMonth();
+            return (
+              <div key={`${year}-${month}`} onClick={() => toggleMonth(year, month)} style={{
+                ...card({ padding: "12px 16px" }),
+                border: `1.5px solid ${sel ? C.teal : C.grey}`,
+                background: sel ? `${C.wave}88` : "#FFF",
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                cursor: "pointer",
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ fontFamily: ff, fontWeight: 800, fontSize: 14, color: sel ? C.teal : C.text }}>
+                    {MONTHS[month]} {year}
+                  </span>
+                  {isCurrent && <span style={{ fontFamily: ff, fontWeight: 700, fontSize: 10, color: "#fff", background: C.teal, borderRadius: 4, padding: "2px 6px" }}>Current</span>}
+                </div>
+                <div style={{
+                  width: 22, height: 22, borderRadius: 5, flexShrink: 0,
+                  border: `2px solid ${sel ? C.teal : C.greyMid}`,
+                  background: sel ? C.teal : "transparent",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}>
+                  {sel && <span style={{ color: "#fff", fontSize: 13, fontWeight: 900 }}>✓</span>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {selectedMonths.length > 0 && (
+          <div style={card({ padding: "10px 14px", marginBottom: 14, background: `${C.wave}44` })}>
+            <p style={{ margin: 0, fontFamily: ffb, fontSize: 12, color: C.teal }}>
+              {selectedMonths.length} month{selectedMonths.length > 1 ? "s" : ""} selected →{" "}
+              {selectedMonths.map(({ year, month }) => `${MONTHS[month]} ${year}`).join(", ")}
+            </p>
+          </div>
+        )}
+
+        <button
+          style={btnS({ opacity: (loading || selectedMonths.length === 0) ? 0.5 : 1 })}
+          disabled={loading || selectedMonths.length === 0}
+          onClick={handlePrint}
+        >
+          {loading ? "Loading schedule…" : `Print ${selectedMonths.length} Month${selectedMonths.length !== 1 ? "s" : ""}`}
+        </button>
+      </div>
+    </>
+  );
+}
+
 export function MorePage({ onNav, currentProvider }) {
   const isAdmin = currentProvider?.is_admin;
   const items = [
@@ -812,6 +1068,7 @@ export function MorePage({ onNav, currentProvider }) {
     [IcoClipboard,"Call Logic","logic"],
     [IcoPalm,"Upcoming Vacations","vacations"],
     [IcoScale,"Call Fairness","fairness"],
+    [IcoPrint,"Print Schedule","print"],
     [IcoGear,"Settings","settings"],
   ];
   return (

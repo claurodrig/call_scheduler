@@ -16,6 +16,7 @@ import {
   FairnessPage,
   UpcomingVacationsPage,
   CallLogicPage,
+  PrintSchedulePage,
 } from "./components";
 
 const NAV = [
@@ -111,6 +112,7 @@ export default function App() {
     if (sub === "fairness")  return <FairnessPage onBack={()=>setSub(null)}/>;
     if (sub === "vacations") return <UpcomingVacationsPage onBack={()=>setSub(null)}/>;
     if (sub === "logic")     return <CallLogicPage onBack={()=>setSub(null)} currentProvider={currentProvider}/>;
+    if (sub === "print")     return <PrintSchedulePage onBack={()=>setSub(null)}/>;
     if (sub === "settings")  return <SettingsPage onBack={()=>setSub(null)} onLogout={handleLogout} currentProvider={currentProvider}/>;
     if (tab === "home")      return <HomePage/>;
     if (tab === "providers") return <ProvidersPage onMessage={onMessage}/>;
