@@ -1691,20 +1691,47 @@ export function AdminPage({ onBack }) {
 
     const requesterEmail = req.providers?.email;
 
+    // Build conflicts one by one, updating counts as we go
+    const sessionCounts = { ...callCounts };
+    const sessionLastDate = { ...lastCallDate };
+
     const conflicts = conflictDates.map(({ date, currentProv }) => {
       const available = allProviders
-        .filter(p => p.email !== requesterEmail && !isProvBlocked(p.email, date))
+        .filter(p => {
+          if (p.email === requesterEmail) return false;
+          if (isProvBlocked(p.email, date)) return false;
+          // Enforce 3-day gap from their last call
+          const last = sessionLastDate[p.email];
+          if (last) {
+            const gap = Math.floor((new Date(date + "T00:00:00") - new Date(last + "T00:00:00")) / 86400000);
+            if (gap <= 3) return false;
+          }
+          return true;
+        })
         .sort((a, b) => {
-          // Sort by fewest calls first, then most rested
-          if (callCounts[a.email] !== callCounts[b.email])
-            return callCounts[a.email] - callCounts[b.email];
-          const lastA = lastCallDate[a.email];
-          const lastB = lastCallDate[b.email];
+          if (sessionCounts[a.email] !== sessionCounts[b.email])
+            return sessionCounts[a.email] - sessionCounts[b.email];
+          const lastA = sessionLastDate[a.email];
+          const lastB = sessionLastDate[b.email];
           if (!lastA) return -1;
           if (!lastB) return 1;
-          return lastA < lastB ? -1 : 1; // most rested (oldest last call) first
+          return lastA < lastB ? -1 : 1;
         });
-      return { date, currentProv, suggestions: available, blocked: available.length === 0 };
+
+      // If no one passes gap check, fall back without gap constraint
+      const fallback = available.length === 0
+        ? allProviders
+            .filter(p => p.email !== requesterEmail && !isProvBlocked(p.email, date))
+            .sort((a, b) => sessionCounts[a.email] - sessionCounts[b.email])
+        : available;
+
+      // Pre-increment top suggestion so next date considers them more loaded
+      if (fallback.length > 0) {
+        sessionCounts[fallback[0].email]++;
+        sessionLastDate[fallback[0].email] = date;
+      }
+
+      return { date, currentProv, suggestions: fallback, blocked: fallback.length === 0 };
     });
 
     const hardBlocked = conflicts.filter(c => c.blocked).map(c => c.date);
