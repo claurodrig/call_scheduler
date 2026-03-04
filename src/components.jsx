@@ -1246,6 +1246,30 @@ function AIScheduleGenerator() {
     init();
   }, []);
 
+  const refreshCompleteness = async () => {
+    const today = new Date();
+    const toScan = monthsBetween(today.getFullYear() - 1, 0, today.getFullYear() + 2, 11 + 1);
+    const results = await Promise.all(
+      toScan.map(({ year, month }) =>
+        fetchSchedule(year, month).then(data => ({ year, month, data }))
+      )
+    );
+    let origin = null;
+    for (const { year, month, data } of results) {
+      if (Object.keys(data).length > 0) {
+        if (!origin || year < origin.year || (year === origin.year && month < origin.month)) {
+          origin = { year, month };
+        }
+      }
+    }
+    setOriginYM(origin);
+    const completeness = {};
+    for (const { year, month, data } of results) {
+      completeness[`${year}-${month}`] = isMonthComplete(data, year, month);
+    }
+    setCompleteMonths(completeness);
+  };
+
   // For a given target year/month, check if all months from origin up to (not including) target are complete
   const getBlockingMonths = (targetYear, targetMonth) => {
     if (!originYM) return []; // no origin = no restriction
@@ -1327,6 +1351,7 @@ function AIScheduleGenerator() {
         // Add this month to history for next iteration in bulk mode
         const savedData = await fetchSchedule(y, m);
         Object.assign(fullHistory, savedData);
+        await refreshCompleteness();
         summaries.push(`${MONTHS[m]} ${y}: ${result.summary}`);
         setCompleteMonths(prev => ({
           ...prev,
