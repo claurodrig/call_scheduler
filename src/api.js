@@ -149,3 +149,17 @@ export async function updateNoCallDayStatus(requestId, status, providerId, day) 
   }
   return !error;
 }
+export async function updateScheduleDate(date, providerEmail) {
+  const { data: provData } = await supabase
+    .from("providers")
+    .select("id")
+    .eq("email", providerEmail)
+    .single();
+  if (!provData) { console.error("updateScheduleDate: provider not found", providerEmail); return false; }
+  const { error } = await supabase
+    .from("call_schedule")
+    .update({ provider_id: provData.id })
+    .eq("date", date);
+  if (error) console.error("updateScheduleDate:", error);
+  return !error;
+}

@@ -4,7 +4,7 @@ import {
   ff, ffb, dkey, getDays, getFirst,
   card, btnS, oBtnS, inpS, lblS, badge
 } from "./data";
-import { fetchSchedule, fetchProviders, fetchRequests, submitRequest, updateRequestStatus, fetchMessages, sendMessage, generateSchedule, saveGeneratedSchedule, cancelRequest, fetchNoCallDayRequests, submitNoCallDayRequest, updateNoCallDayStatus, fetchIncomingSwitchRequests } from "./api";
+import { fetchSchedule, fetchProviders, fetchRequests, submitRequest, updateRequestStatus, fetchMessages, sendMessage, generateSchedule, saveGeneratedSchedule, cancelRequest, fetchNoCallDayRequests, submitNoCallDayRequest, updateNoCallDayStatus, fetchIncomingSwitchRequests, updateScheduleDate } from "./api";
 import { supabase } from "./supabase";
 
 export function IcoHome({color}) {
@@ -1544,9 +1544,87 @@ export function AdminPage({ onBack }) {
     setUserLoading(false);
   };
 
+  const [conflictModal, setConflictModal] = useState(null);
+  // conflictModal: { requestId, conflicts: [{ date, currentEmail, currentProv, suggestions: [provider] }], selections: { date: email }, blocked: [date] }
+
   const handleStatus = async (id, status) => {
-    await updateRequestStatus(id, status);
+    if (status !== "Approved") {
+      await updateRequestStatus(id, status);
+      fetchRequests().then(setReqs);
+      return;
+    }
+
+    // Check for schedule conflicts
+    const req = reqs.find(r => r.id === id);
+    if (!req) return;
+
+    const allProviders = await fetchProviders();
+    const start = new Date(req.start_date + "T00:00:00");
+    const end   = new Date(req.end_date   + "T00:00:00");
+
+    // Collect all dates in range
+    const conflictDates = [];
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+      // Fetch schedule for that month
+      const monthData = await fetchSchedule(d.getFullYear(), d.getMonth());
+      if (monthData[dateStr]) {
+        const assignedEmail = monthData[dateStr]?.email;
+        if (assignedEmail === req.providers?.email) {
+          conflictDates.push({ date: dateStr, currentProv: monthData[dateStr] });
+        }
+      }
+    }
+
+    if (conflictDates.length === 0) {
+      // No conflicts, approve directly
+      await updateRequestStatus(id, "Approved");
+      fetchRequests().then(setReqs);
+      return;
+    }
+
+    // Build suggestions for each conflict
+    const allReqs = await fetchRequests();
+    const otherApproved = allReqs.filter(r => r.status === "Approved" && r.id !== id);
+
+    const isProvBlocked = (email, dateStr) =>
+      otherApproved.some(r => {
+        const pEmail = r.providers?.email;
+        if (pEmail !== email) return false;
+        return dateStr >= r.start_date && dateStr <= r.end_date;
+      });
+
+    // Also block the requesting provider
+    const requesterEmail = req.providers?.email;
+
+    const conflicts = conflictDates.map(({ date, currentProv }) => {
+      const available = allProviders.filter(p =>
+        p.email !== requesterEmail &&
+        !isProvBlocked(p.email, date)
+      );
+      return { date, currentProv, suggestions: available, blocked: available.length === 0 };
+    });
+
+    const hardBlocked = conflicts.filter(c => c.blocked).map(c => c.date);
+    const selections = {};
+    conflicts.filter(c => !c.blocked).forEach(c => {
+      selections[c.date] = c.suggestions[0]?.email || null;
+    });
+
+    setConflictModal({ requestId: id, conflicts, selections, hardBlocked, req });
+  };
+
+  const handleConflictConfirm = async () => {
+    const { requestId, conflicts, selections } = conflictModal;
+    // Update each conflicting date in the schedule
+    await Promise.all(
+      conflicts.filter(c => !c.blocked).map(({ date }) =>
+        updateScheduleDate(date, selections[date])
+      )
+    );
+    await updateRequestStatus(requestId, "Approved");
     fetchRequests().then(setReqs);
+    setConflictModal(null);
   };
 
   const handleNoCallStatus = async (id, status, providerId, day) => {
@@ -1562,6 +1640,57 @@ export function AdminPage({ onBack }) {
         <button onClick={onBack} style={{background:"none", border:"none", fontSize:22, cursor:"pointer", color:C.primary}}>‹</button>
         <span style={{fontFamily:ff, fontWeight:900, fontSize:16, color:C.text}}>Admin Panel</span>
       </div>
+
+      {/* Conflict modal overlay */}
+      {conflictModal && tab === "requests" && (() => {
+        const { conflicts, selections, hardBlocked, req } = conflictModal;
+        return (
+          <div style={{position:"fixed", top:0, left:0, right:0, bottom:0, background:"rgba(0,0,0,0.4)", zIndex:1000, display:"flex", alignItems:"flex-end", justifyContent:"center"}}>
+            <div style={{background:C.bg, borderRadius:"16px 16px 0 0", padding:"20px 16px 32px", width:"100%", maxWidth:430, maxHeight:"85vh", overflowY:"auto"}}>
+              <p style={{fontFamily:ff, fontWeight:900, fontSize:16, color:C.text, marginBottom:4}}>Schedule Conflicts</p>
+              <div style={{background:"#fff8f0", border:"1.5px solid #f5a623", borderRadius:8, padding:"10px 12px", marginBottom:14}}>
+                <p style={{margin:0, fontFamily:ff, fontWeight:800, fontSize:12, color:"#c47d0a"}}>
+                  {conflicts.length} scheduled date{conflicts.length > 1 ? "s" : ""} conflict with this time off
+                </p>
+                <p style={{margin:"3px 0 0", fontFamily:ffb, fontSize:11, color:C.sub}}>{req.providers?.name} · {req.start_date} → {req.end_date}</p>
+              </div>
+
+              {hardBlocked.length > 0 && (
+                <div style={{background:"#fff0f0", border:"1.5px solid #e05c5c", borderRadius:8, padding:"10px 12px", marginBottom:14}}>
+                  <p style={{margin:0, fontFamily:ff, fontWeight:800, fontSize:12, color:"#c0392b"}}>⚠ Cannot approve</p>
+                  <p style={{margin:"4px 0 0", fontFamily:ffb, fontSize:11, color:C.sub}}>No available replacement for:</p>
+                  {hardBlocked.map(d => <p key={d} style={{margin:"3px 0 0", fontFamily:ff, fontWeight:700, fontSize:12, color:"#c0392b"}}>{d}</p>)}
+                  <p style={{margin:"6px 0 0", fontFamily:ffb, fontSize:11, color:C.sub}}>Resolve conflicting time-off first.</p>
+                </div>
+              )}
+
+              {conflicts.filter(c => !c.blocked).map(({ date, currentProv, suggestions }) => (
+                <div key={date} style={card({padding:"12px 14px", marginBottom:10})}>
+                  <p style={{margin:"0 0 2px", fontFamily:ff, fontWeight:800, fontSize:13, color:C.text}}>{date}</p>
+                  <p style={{margin:"0 0 8px", fontFamily:ffb, fontSize:11, color:C.sub}}>Replace <strong>{currentProv?.name}</strong> with:</p>
+                  {suggestions.map(p => (
+                    <div key={p.email} onClick={() => setConflictModal(prev => ({...prev, selections:{...prev.selections,[date]:p.email}}))} style={{
+                      display:"flex", alignItems:"center", gap:10, padding:"8px 10px",
+                      borderRadius:8, cursor:"pointer", marginBottom:6,
+                      border:`2px solid ${selections[date]===p.email ? C.teal : C.grey}`,
+                      background: selections[date]===p.email ? `${C.wave}88` : "#fff",
+                    }}>
+                      <Avatar p={p} size={26}/>
+                      <span style={{fontFamily:ff, fontWeight:700, fontSize:13, color:C.text, flex:1}}>{p.name}</span>
+                      {selections[date]===p.email && <span style={{color:C.teal, fontWeight:900}}>✓</span>}
+                    </div>
+                  ))}
+                </div>
+              ))}
+
+              {hardBlocked.length === 0 && (
+                <button style={btnS({marginBottom:8})} onClick={handleConflictConfirm}>Confirm & Approve</button>
+              )}
+              <button style={{...oBtnS(), width:"100%"}} onClick={()=>setConflictModal(null)}>Cancel</button>
+            </div>
+          </div>
+        );
+      })()}
       <div style={{display:"flex", background:"#FFF", borderRadius:8, padding:3, marginBottom:16, border:`1px solid ${C.grey}`}}>
         {[
           ["requests", "Requests"],
