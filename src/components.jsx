@@ -930,6 +930,8 @@ export function AdminPage({ onBack }) {
     }
     setUserLoading(false);
   };
+
+  const handleRoleToggle = async (provider) => {
     setUserLoading(true);
     const result = await callApi("/api/admin-update-role", { providerId: provider.id, isAdmin: !provider.is_admin });
     if (result.message) {
