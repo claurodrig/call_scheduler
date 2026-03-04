@@ -374,7 +374,8 @@ export function RequestPage({ currentProvider }) {
     return badge(status);
   };
 
-  const [switchDate, setSwitchDate]       = useState("");
+  const [switchDate, setSwitchDate]         = useState("");
+  const [switchToDate, setSwitchToDate]     = useState("");
   const [switchSchedule, setSwitchSchedule] = useState({});
   const [switchLoading, setSwitchLoading] = useState(false);
 
@@ -408,20 +409,22 @@ export function RequestPage({ currentProvider }) {
   const switchProviderOnDate = switchDate ? switchSchedule[switchDate] : null;
 
   const handleSwitchSubmit = async () => {
-    if (!switchDate || !currentProvider) return;
+    if (!switchDate || !switchToDate || !currentProvider) return;
     setLoading(true);
     const otherProvider = switchSchedule[switchDate];
+    const provOnSwitchTo = switchSchedule[switchToDate];
     const { error } = await submitRequest({
       providerId: currentProvider.id,
       type: "Call Switch",
       startDate: switchDate,
-      endDate: switchDate,
-      notes: `Requesting switch with ${otherProvider?.name || "Unassigned"} on ${switchDate}`,
+      endDate: switchToDate,
+      notes: `Requesting to give away ${switchDate} and take ${switchToDate} (currently assigned to ${provOnSwitchTo?.name || "nobody"})`,
       targetProviderId: otherProvider?.id || null,
     });
     if (!error) {
       setDone(true);
       setSwitchDate("");
+      setSwitchToDate("");
       fetchRequests(currentProvider.id).then(setMyReqs);
       setTimeout(() => setDone(false), 2500);
     }
@@ -529,24 +532,113 @@ export function RequestPage({ currentProvider }) {
                   </div>
             }
 
-            {/* Show who is on call on the selected date — for context, not a swap target */}
+            {/* Show who is on call on the selected give-away date */}
             {switchDate && (
-              <div style={{
-                marginTop: 14, padding: "12px 14px", borderRadius: 8,
-                background: `${C.wave}88`, border: `1px solid ${C.teal}33`
-              }}>
+              <div style={{ marginTop: 14, padding: "12px 14px", borderRadius: 8, background: `${C.wave}88`, border: `1px solid ${C.teal}33` }}>
                 <p style={{ margin: "0 0 8px", fontFamily: ff, fontWeight: 700, fontSize: 11, color: C.sub, textTransform: "uppercase", letterSpacing: 1 }}>
-                  You are on call on this date
+                  You are giving away
                 </p>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                   {currentProvider && <Avatar p={currentProvider} size={36} ring />}
                   <div>
                     <p style={{ margin: 0, fontFamily: ff, fontWeight: 800, fontSize: 13, color: C.text }}>{currentProvider?.name}</p>
-                    <p style={{ margin: "2px 0 0", fontFamily: ffb, fontSize: 11, color: C.sub }}>Requesting to be relieved of this call</p>
+                    <p style={{ margin: "2px 0 0", fontFamily: ffb, fontSize: 11, color: C.sub }}>
+                      Your call on {new Date(switchDate + "T00:00:00").toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })}
+                    </p>
                   </div>
                 </div>
               </div>
             )}
+
+            {/* Step 2 — pick the date to take in return */}
+            {switchDate && <>
+              <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${C.grey}` }}>
+                <p style={{ margin: "0 0 6px", fontFamily: ff, fontWeight: 800, fontSize: 13, color: C.text }}>
+                  Which date do you want to take instead?
+                </p>
+                <p style={{ margin: "0 0 12px", fontFamily: ffb, fontSize: 11, color: C.sub }}>
+                  Pick a date from the schedule to offer as your side of the swap.
+                </p>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {Object.entries(switchSchedule)
+                    .filter(([date]) => {
+                      const d = new Date(date + "T00:00:00");
+                      return d >= new Date() && date !== switchDate;
+                    })
+                    .sort(([a], [b]) => a.localeCompare(b))
+                    .map(([date, prov]) => {
+                      const d = new Date(date + "T00:00:00");
+                      const isSelected = switchToDate === date;
+                      return (
+                        <div key={date} onClick={() => setSwitchToDate(isSelected ? "" : date)} style={{
+                          padding: "10px 14px", borderRadius: 8, cursor: "pointer",
+                          border: `1.5px solid ${isSelected ? "#8b7cf6" : C.grey}`,
+                          background: isSelected ? "#f5f3ff" : "#FFF",
+                        }}>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                            <div style={{ flex: 1 }}>
+                              <p style={{ margin: 0, fontFamily: ff, fontWeight: 800, fontSize: 12, color: isSelected ? "#8b7cf6" : C.text }}>
+                                {d.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric", year: "numeric" })}
+                              </p>
+                              {prov && (
+                                <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}>
+                                  <Avatar p={prov} size={18} />
+                                  <p style={{ margin: 0, fontFamily: ffb, fontSize: 11, color: C.sub }}>
+                                    {prov.name} is on call
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                            <div style={{
+                              width: 18, height: 18, borderRadius: "50%", flexShrink: 0,
+                              border: `2px solid ${isSelected ? "#8b7cf6" : C.greyMid}`,
+                              background: isSelected ? "#8b7cf6" : "transparent",
+                              display: "flex", alignItems: "center", justifyContent: "center",
+                            }}>
+                              {isSelected && <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#fff" }} />}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  }
+                </div>
+              </div>
+
+              {/* Summary of the full swap */}
+              {switchToDate && (() => {
+                const provOnTo = switchSchedule[switchToDate];
+                return (
+                  <div style={{ marginTop: 14, padding: "12px 14px", borderRadius: 8, background: "#f5f3ff", border: `1.5px solid #8b7cf6` }}>
+                    <p style={{ margin: "0 0 10px", fontFamily: ff, fontWeight: 800, fontSize: 12, color: "#8b7cf6" }}>
+                      Swap Summary
+                    </p>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                      <Avatar p={currentProvider} size={28} />
+                      <div>
+                        <p style={{ margin: 0, fontFamily: ff, fontWeight: 700, fontSize: 11, color: C.text }}>You give away</p>
+                        <p style={{ margin: 0, fontFamily: ffb, fontSize: 11, color: C.sub }}>
+                          {new Date(switchDate + "T00:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+                        </p>
+                      </div>
+                      <span style={{ fontSize: 18, color: "#8b7cf6", margin: "0 4px" }}>⇄</span>
+                      {provOnTo && <Avatar p={provOnTo} size={28} />}
+                      <div>
+                        <p style={{ margin: 0, fontFamily: ff, fontWeight: 700, fontSize: 11, color: C.text }}>
+                          {provOnTo ? `${provOnTo.name} gives away` : "You take"}
+                        </p>
+                        <p style={{ margin: 0, fontFamily: ffb, fontSize: 11, color: C.sub }}>
+                          {new Date(switchToDate + "T00:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+                        </p>
+                      </div>
+                    </div>
+                    <p style={{ margin: 0, fontFamily: ffb, fontSize: 11, color: "#8b7cf6" }}>
+                      {provOnTo ? `${provOnTo.name} will need to approve this swap.` : "No provider is currently assigned to that date."}
+                    </p>
+                  </div>
+                );
+              })()}
+            </>}
           </div>
         )}
 
@@ -555,9 +647,9 @@ export function RequestPage({ currentProvider }) {
               <span style={{ fontFamily: ff, fontWeight: 900, fontSize: 14, color: C.teal }}>Request Submitted!</span>
             </div>
           : <button
-              style={btnS({ opacity: (loading || (type === "Call Switch" ? !switchDate : (!start || !end))) ? 0.6 : 1 })}
+              style={btnS({ opacity: (loading || (type === "Call Switch" ? (!switchDate || !switchToDate) : (!start || !end))) ? 0.6 : 1 })}
               onClick={type === "Call Switch" ? handleSwitchSubmit : handleSubmit}
-              disabled={loading || (type === "Call Switch" ? !switchDate : (!start || !end))}
+              disabled={loading || (type === "Call Switch" ? (!switchDate || !switchToDate) : (!start || !end))}
             >
               {loading ? "Submitting..." : "Submit Request"}
             </button>
@@ -640,8 +732,7 @@ export function RequestPage({ currentProvider }) {
             </div>
           );
         })}
-      </>}})}
-
+      </>}
       {tab === "nocall" && <>
         <div style={card({ padding: "12px 14px", marginBottom: 14, background: `${C.wave}88`, border: `1px solid ${C.teal}33` })}>
           <p style={{ margin: 0, fontFamily: ff, fontWeight: 800, fontSize: 13, color: C.teal }}>Recurring Weekly No-Call Day</p>
