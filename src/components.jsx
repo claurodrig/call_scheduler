@@ -866,7 +866,6 @@ export function PrintSchedulePage({ onBack }) {
     if (selectedMonths.length === 0) return;
     setLoading(true);
 
-    // Fetch all selected months
     const results = await Promise.all(
       selectedMonths.map(({ year, month }) =>
         fetchSchedule(year, month).then(data => ({ year, month, data }))
@@ -879,8 +878,83 @@ export function PrintSchedulePage({ onBack }) {
     setSchedules(merged);
     setLoading(false);
 
-    // Wait for render then print
-    setTimeout(() => window.print(), 300);
+    // Build full HTML for a new print window
+    const pagesHtml = selectedMonths.map(({ year, month }) => {
+      const scheduleData = merged[`${year}-${month}`];
+      const monthName = MONTHS[month];
+      const days = getDays(year, month);
+      const firstDay = getFirst(year, month);
+      const cells = [];
+      for (let i = 0; i < firstDay; i++) cells.push(null);
+      for (let d = 1; d <= days; d++) cells.push(d);
+      while (cells.length % 7 !== 0) cells.push(null);
+      const numRows = Math.ceil(cells.length / 7);
+      const rowH = Math.floor(570 / numRows);
+
+      const cellsHtml = cells.map((d, i) => {
+        if (!d) return `<div style="background:#fafafa;border-radius:4px;"></div>`;
+        const dateKey = `${year}-${String(month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+        const prov = scheduleData?.[dateKey];
+        const dow = (firstDay + d - 1) % 7;
+        const isWeekend = dow === 0 || dow === 6;
+        const avatarHtml = prov
+          ? prov.avatar_url
+            ? `<img src="${prov.avatar_url}" style="width:22px;height:22px;border-radius:50%;object-fit:cover;margin-bottom:2px;border:2px solid ${prov.color};display:block;"/>`
+            : `<div style="width:22px;height:22px;border-radius:50%;background:${prov.color};margin-bottom:2px;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:900;color:#fff;flex-shrink:0;">${prov.initials}</div>`
+          : "";
+        const nameHtml = prov ? `<span style="font-size:8px;font-weight:700;color:#333;line-height:1.2;">${prov.name.replace("Dr. ","")}</span>` : "";
+        return `<div style="border:1px solid ${prov ? prov.color+"55" : "#e8e8e8"};border-top:3px solid ${prov ? prov.color : "#e8e8e8"};border-radius:4px;padding:3px 4px;background:${isWeekend?"#fdf8f8":"#fff"};display:flex;flex-direction:column;overflow:hidden;">
+          <span style="font-size:10px;font-weight:800;color:${isWeekend?"#e05c5c":"#1a3a35"};margin-bottom:2px;line-height:1;">${d}</span>
+          ${avatarHtml}${nameHtml}
+        </div>`;
+      }).join("");
+
+      const legendHtml = providers.map(p =>
+        `<div style="display:flex;align-items:center;gap:4px;">
+          <div style="width:8px;height:8px;border-radius:50%;background:${p.color};flex-shrink:0;"></div>
+          <span style="font-size:7.5px;color:#555;font-weight:600;">${p.name}</span>
+        </div>`
+      ).join("");
+
+      const logoHtml = logoDataUrl
+        ? `<img src="${logoDataUrl}" style="height:34px;object-fit:contain;"/>`
+        : `<span style="font-weight:900;font-size:15px;color:#1a8c78;">Beaches OBGYN</span>`;
+
+      return `<div style="width:1070px;height:780px;padding:18px 22px 14px;box-sizing:border-box;background:#fff;display:flex;flex-direction:column;page-break-after:always;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;border-bottom:2px solid #1a8c78;padding-bottom:6px;flex-shrink:0;">
+          ${logoHtml}
+          <div style="text-align:right;">
+            <div style="font-size:18px;font-weight:900;color:#1a3a35;">${monthName} ${year}</div>
+            <div style="font-size:8px;color:#888;">Call Schedule</div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:2px;flex-shrink:0;">
+          ${["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map((d,i)=>
+            `<div style="text-align:center;padding:3px 0;font-size:9px;font-weight:900;color:${i===0||i===6?"#e05c5c":"#1a8c78"};background:#f0faf8;border-radius:3px;">${d}</div>`
+          ).join("")}
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(7,1fr);grid-template-rows:repeat(${numRows},${rowH}px);gap:2px;flex:1;">
+          ${cellsHtml}
+        </div>
+        <div style="margin-top:6px;padding-top:5px;border-top:1px solid #e8e8e8;display:flex;flex-wrap:wrap;gap:3px 12px;flex-shrink:0;">
+          ${legendHtml}
+        </div>
+      </div>`;
+    }).join("");
+
+    const win = window.open("", "_blank", "width=1120,height=820");
+    win.document.write(`<!DOCTYPE html><html><head><title>Call Schedule</title>
+      <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: -apple-system, sans-serif; }
+        body { background: #fff; }
+        @page { size: 11in 8.5in landscape; margin: 0; }
+        @media print {
+          body { width: 11in; }
+          @page { size: 11in 8.5in landscape; margin: 0; }
+        }
+      </style>
+    </head><body>${pagesHtml}<script>window.onload=function(){window.print();}<\/script></body></html>`);
+    win.document.close();
   };
 
   const renderCalendar = (year, month, scheduleData) => {
@@ -977,33 +1051,6 @@ export function PrintSchedulePage({ onBack }) {
 
   return (
     <>
-      {/* Print styles */}
-      <style>{`
-        @media print {
-          html, body { margin: 0; padding: 0; background: #fff; }
-          body * { visibility: hidden; }
-          #print-container, #print-container * { visibility: visible; }
-          #print-container {
-            display: block !important;
-            position: fixed;
-            top: 0; left: 0;
-            width: 100%;
-          }
-          @page {
-            size: 11in 8.5in landscape;
-            margin: 0;
-          }
-        }
-        #print-container { display: none; }
-      `}</style>
-
-      {/* Print output container */}
-      <div id="print-container">
-        {selectedMonths.map(({ year, month }) =>
-          renderCalendar(year, month, schedules[`${year}-${month}`] || {})
-        )}
-      </div>
-
       {/* UI */}
       <div style={{ paddingBottom: 20 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
@@ -1064,7 +1111,6 @@ export function PrintSchedulePage({ onBack }) {
           {loading ? "Loading schedule…" : `Print ${selectedMonths.length} Month${selectedMonths.length !== 1 ? "s" : ""}`}
         </button>
       </div>
-    </>
   );
 }
 
