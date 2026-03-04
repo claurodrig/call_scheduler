@@ -862,8 +862,6 @@ export function PrintSchedulePage({ onBack }) {
     fetchProviders().then(setProviders);
   }, []);
 
-  const printFrameRef = useRef(null);
-
   const handlePrint = async () => {
     if (selectedMonths.length === 0) return;
     setLoading(true);
@@ -889,73 +887,71 @@ export function PrintSchedulePage({ onBack }) {
       for (let d = 1; d <= days; d++) cells.push(d);
       while (cells.length % 7 !== 0) cells.push(null);
       const numRows = Math.ceil(cells.length / 7);
-      const rowH = Math.floor(540 / numRows);
+      const rowH = Math.floor(520 / numRows);
 
-      const cellsHtml = cells.map((d, i) => {
+      const cellsHtml = cells.map((d) => {
         if (!d) return `<div style="background:#fafafa;border-radius:4px;"></div>`;
         const dateKey = `${year}-${String(month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
         const prov = scheduleData?.[dateKey];
         const dow = (firstDay + d - 1) % 7;
         const isWeekend = dow === 0 || dow === 6;
-        const avatarHtml = prov
-          ? prov.avatar_url
-            ? `<img src="${prov.avatar_url}" style="width:22px;height:22px;border-radius:50%;object-fit:cover;margin-bottom:2px;border:2px solid ${prov.color};display:block;"/>`
-            : `<div style="width:22px;height:22px;border-radius:50%;background:${prov.color};margin-bottom:2px;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:900;color:#fff;">${prov.initials}</div>`
-          : "";
-        const nameHtml = prov ? `<span style="font-size:8px;font-weight:700;color:#333;line-height:1.2;">${prov.name.replace("Dr. ","")}</span>` : "";
+        const avatarHtml = prov?.avatar_url
+          ? `<img src="${prov.avatar_url}" style="width:20px;height:20px;border-radius:50%;object-fit:cover;margin-bottom:2px;border:2px solid ${prov.color};display:block;"/>`
+          : prov
+            ? `<div style="width:20px;height:20px;border-radius:50%;background:${prov.color};margin-bottom:2px;display:flex;align-items:center;justify-content:center;font-size:7px;font-weight:900;color:#fff;">${prov.initials}</div>`
+            : "";
+        const nameHtml = prov ? `<div style="font-size:7.5px;font-weight:700;color:#333;line-height:1.2;">${prov.name.replace("Dr. ","")}</div>` : "";
         return `<div style="border:1px solid ${prov ? prov.color+"55" : "#e8e8e8"};border-top:3px solid ${prov ? prov.color : "#e8e8e8"};border-radius:4px;padding:3px 4px;background:${isWeekend?"#fdf8f8":"#fff"};display:flex;flex-direction:column;overflow:hidden;">
-          <span style="font-size:10px;font-weight:800;color:${isWeekend?"#e05c5c":"#1a3a35"};margin-bottom:2px;line-height:1;">${d}</span>
+          <div style="font-size:10px;font-weight:800;color:${isWeekend?"#e05c5c":"#1a3a35"};margin-bottom:2px;">${d}</div>
           ${avatarHtml}${nameHtml}
         </div>`;
       }).join("");
 
       const legendHtml = providers.map(p =>
         `<div style="display:flex;align-items:center;gap:4px;">
-          <div style="width:8px;height:8px;border-radius:50%;background:${p.color};flex-shrink:0;"></div>
-          <span style="font-size:7.5px;color:#555;font-weight:600;">${p.name}</span>
+          <div style="width:8px;height:8px;border-radius:50%;background:${p.color};"></div>
+          <span style="font-size:7px;color:#555;font-weight:600;">${p.name}</span>
         </div>`
       ).join("");
 
       const logoHtml = logoDataUrl
-        ? `<img src="${logoDataUrl}" style="height:34px;object-fit:contain;"/>`
-        : `<span style="font-weight:900;font-size:15px;color:#1a8c78;">Beaches OBGYN</span>`;
+        ? `<img src="${logoDataUrl}" style="height:32px;object-fit:contain;"/>`
+        : `<span style="font-weight:900;font-size:14px;color:#1a8c78;">Beaches OBGYN</span>`;
 
-      return `<div style="width:100%;height:100vh;padding:12px 18px 10px;box-sizing:border-box;background:#fff;display:flex;flex-direction:column;page-break-after:always;overflow:hidden;">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;border-bottom:2px solid #1a8c78;padding-bottom:6px;flex-shrink:0;">
-          ${logoHtml}
-          <div style="text-align:right;">
-            <div style="font-size:18px;font-weight:900;color:#1a3a35;">${monthName} ${year}</div>
-            <div style="font-size:8px;color:#888;">Call Schedule</div>
+      return `
+        <div style="width:277mm;height:190mm;padding:8mm 10mm;box-sizing:border-box;background:#fff;display:flex;flex-direction:column;page-break-after:always;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4mm;border-bottom:2px solid #1a8c78;padding-bottom:3mm;flex-shrink:0;">
+            ${logoHtml}
+            <div style="text-align:right;">
+              <div style="font-size:16px;font-weight:900;color:#1a3a35;">${monthName} ${year}</div>
+              <div style="font-size:8px;color:#888;">Call Schedule</div>
+            </div>
           </div>
-        </div>
-        <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:2px;flex-shrink:0;">
-          ${["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map((d,i)=>
-            `<div style="text-align:center;padding:3px 0;font-size:9px;font-weight:900;color:${i===0||i===6?"#e05c5c":"#1a8c78"};background:#f0faf8;border-radius:3px;">${d}</div>`
-          ).join("")}
-        </div>
-        <div style="display:grid;grid-template-columns:repeat(7,1fr);grid-template-rows:repeat(${numRows},${rowH}px);gap:2px;flex:1;">
-          ${cellsHtml}
-        </div>
-        <div style="margin-top:6px;padding-top:5px;border-top:1px solid #e8e8e8;display:flex;flex-wrap:wrap;gap:3px 12px;flex-shrink:0;">
-          ${legendHtml}
-        </div>
-      </div>`;
+          <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:2px;flex-shrink:0;">
+            ${["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map((d,i)=>
+              `<div style="text-align:center;padding:2px 0;font-size:8px;font-weight:900;color:${i===0||i===6?"#e05c5c":"#1a8c78"};background:#f0faf8;border-radius:3px;">${d}</div>`
+            ).join("")}
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(7,1fr);grid-template-rows:repeat(${numRows},${rowH}px);gap:2px;flex:1;overflow:hidden;">
+            ${cellsHtml}
+          </div>
+          <div style="margin-top:3mm;padding-top:2mm;border-top:1px solid #e8e8e8;display:flex;flex-wrap:wrap;gap:2px 10px;flex-shrink:0;">
+            ${legendHtml}
+          </div>
+        </div>`;
     }).join("");
 
-    const html = `<!DOCTYPE html><html><head><title>Call Schedule</title>
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Call Schedule</title>
       <style>
-        * { margin:0; padding:0; box-sizing:border-box; font-family:-apple-system,sans-serif; }
+        * { margin:0; padding:0; box-sizing:border-box; font-family:-apple-system,Helvetica,sans-serif; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
         body { background:#fff; }
-        @page { size:11in 8.5in landscape; margin:0; }
+        @page { size: A4 landscape; margin: 0; }
       </style>
     </head><body>${pagesHtml}</body></html>`;
 
-    const frame = printFrameRef.current;
-    frame.srcdoc = html;
-    frame.onload = () => {
-      frame.contentWindow.focus();
-      frame.contentWindow.print();
-    };
+    const blob = new Blob([html], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    window.location.href = url;
   };
 
   const renderCalendar = (year, month, scheduleData) => {
@@ -1052,7 +1048,6 @@ export function PrintSchedulePage({ onBack }) {
 
   return (
       <div style={{ paddingBottom: 20 }}>
-        <iframe ref={printFrameRef} style={{ display: "none" }} title="print-frame" />
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
           <button onClick={onBack} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", color: C.primary }}>‹</button>
           <span style={{ fontFamily: ff, fontWeight: 900, fontSize: 16, color: C.text }}>Print Schedule</span>
