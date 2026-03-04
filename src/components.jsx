@@ -1348,6 +1348,157 @@ export function UpcomingVacationsPage({ onBack }) {
   );
 }
 
+const DEFAULT_RULES = [
+  {
+    id: "even_distribution",
+    label: "Even Call Distribution",
+    description: "All physicians receive equal weekday calls, equal weekend calls, and equal holiday calls per year (over 6–12 month window).",
+    editable: false,
+  },
+  {
+    id: "max_frequency",
+    label: "Max Call Frequency",
+    description: "No provider assigned call more than once every 3 days. Minimum 3 weeks between weekend calls for the same provider.",
+    editable: false,
+  },
+  {
+    id: "time_off",
+    label: "Availability — Time Off",
+    description: "No call assigned to providers on approved time-off dates.",
+    editable: false,
+  },
+  {
+    id: "no_call_day",
+    label: "Recurring No-Call Day",
+    description: "Providers with an approved recurring no-call day are never assigned call on that weekday.",
+    editable: false,
+  },
+  {
+    id: "weekend_split",
+    label: "Weekend Call Split",
+    description: "Weekend call is divided: one provider covers Friday, a different provider covers Saturday & Sunday.",
+    editable: false,
+  },
+  {
+    id: "long_weekend_split",
+    label: "Holiday / Long Weekend Split",
+    description: "On long weekends, call is divided: one provider covers Friday & Saturday, another covers Sunday & Monday.",
+    editable: false,
+  },
+  {
+    id: "holidays",
+    label: "Holiday Recognition",
+    description: "Recognized holidays: Christmas, Thanksgiving, New Year's, July 4th, Memorial Day, Labor Day. Holiday calls are tracked and balanced equally.",
+    editable: false,
+  },
+  {
+    id: "fairness_window",
+    label: "Fairness Tracking Window",
+    description: "Call parity is enforced over a rolling 6–12 month window. Prior months must be fully scheduled before generating future months.",
+    editable: false,
+  },
+];
+
+export function CallLogicPage({ onBack, currentProvider }) {
+  const isAdmin = currentProvider?.is_admin;
+  const STORAGE_KEY = "call_logic_rules";
+
+  const [rules, setRules] = useState(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const savedRules = JSON.parse(saved);
+        // Merge saved toggles with default rules (in case new rules were added)
+        return DEFAULT_RULES.map(r => ({
+          ...r,
+          enabled: savedRules[r.id] !== undefined ? savedRules[r.id] : true,
+        }));
+      }
+    } catch {}
+    return DEFAULT_RULES.map(r => ({ ...r, enabled: true }));
+  });
+
+  const [saved, setSaved] = useState(false);
+
+  const toggle = (id) => {
+    if (!isAdmin) return;
+    setRules(prev => prev.map(r => r.id === id ? { ...r, enabled: !r.enabled } : r));
+  };
+
+  const handleSave = () => {
+    const toStore = {};
+    rules.forEach(r => { toStore[r.id] = r.enabled; });
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(toStore));
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  const enabledCount = rules.filter(r => r.enabled).length;
+
+  return (
+    <div style={{ paddingBottom: 20 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+        <button onClick={onBack} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", color: C.primary }}>‹</button>
+        <span style={{ fontFamily: ff, fontWeight: 900, fontSize: 16, color: C.text }}>Call Logic</span>
+      </div>
+
+      {/* Info banner */}
+      <div style={card({ padding: "12px 14px", marginBottom: 16, background: `${C.wave}88`, border: `1px solid ${C.teal}33` })}>
+        <p style={{ margin: 0, fontFamily: ff, fontWeight: 800, fontSize: 13, color: C.teal }}>
+          Schedule Generation Rules
+        </p>
+        <p style={{ margin: "4px 0 0", fontFamily: ffb, fontSize: 12, color: C.sub }}>
+          {isAdmin
+            ? `These rules govern how the AI generates call schedules. ${enabledCount} of ${rules.length} rules currently active. Toggle rules on or off to customize schedule generation.`
+            : `These rules govern how the AI generates call schedules. ${enabledCount} of ${rules.length} rules are currently active. Contact your administrator to modify rules.`
+          }
+        </p>
+      </div>
+
+      {/* Rules list */}
+      {rules.map(rule => (
+        <div key={rule.id} style={card({
+          padding: "13px 16px", marginBottom: 10,
+          borderLeft: `3px solid ${rule.enabled ? C.teal : C.greyMid}`,
+          opacity: rule.enabled ? 1 : 0.6,
+        })}>
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                <p style={{ margin: 0, fontFamily: ff, fontWeight: 800, fontSize: 13, color: C.text }}>{rule.label}</p>
+                <span style={{
+                  fontFamily: ff, fontWeight: 700, fontSize: 9, padding: "2px 6px", borderRadius: 4,
+                  background: rule.enabled ? `${C.teal}22` : `${C.greyMid}33`,
+                  color: rule.enabled ? C.teal : C.greyMid,
+                }}>
+                  {rule.enabled ? "ACTIVE" : "OFF"}
+                </span>
+              </div>
+              <p style={{ margin: 0, fontFamily: ffb, fontSize: 11, color: C.sub, lineHeight: 1.5 }}>
+                {rule.description}
+              </p>
+            </div>
+            {isAdmin && (
+              <div style={{ flexShrink: 0, marginTop: 2 }}>
+                <Toggle val={rule.enabled} fn={() => toggle(rule.id)} />
+              </div>
+            )}
+          </div>
+        </div>
+      ))}
+
+      {/* Save button — admin only */}
+      {isAdmin && (
+        saved
+          ? <div style={{ padding: 13, borderRadius: 8, textAlign: "center", background: C.wave, border: `1.5px solid ${C.teal}`, marginTop: 4 }}>
+              <span style={{ fontFamily: ff, fontWeight: 900, fontSize: 14, color: C.teal }}>Rules Saved!</span>
+            </div>
+          : <button style={btnS({ marginTop: 4 })} onClick={handleSave}>Save Rules</button>
+      )}
+    </div>
+  );
+}
+
 export function FairnessPage({ onBack }) {
   const [providers, setProviders] = useState([]);
   const [allSchedules, setAllSchedules] = useState({});
