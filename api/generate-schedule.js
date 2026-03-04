@@ -31,6 +31,8 @@ export default async function handler(req, res) {
   const weekdays  = allDates.filter(d => d.dow >= 1 && d.dow <= 4).map(d => d.date);
 
   // Count cumulative history from ALL previous months
+  const historyEntries = previousSchedule ? Object.keys(previousSchedule).length : 0;
+  console.log(`[generate-schedule] ${monthName} ${year} — history entries received: ${historyEntries}`);
   const hist = {};
   for (const p of providers) {
     hist[p.email] = { total: 0, weekends: 0, fridays: 0, weekdays: 0, lastDate: null };
@@ -54,15 +56,15 @@ export default async function handler(req, res) {
   const lastAssigned = {}; // track last date assigned IN THIS MONTH for gap enforcement
   for (const p of providers) lastAssigned[p.email] = hist[p.email].lastDate;
 
-  const gapOk = (email, dateStr, minGap = 3) => {
+  const gapOk = (email, dateStr, minGap = 4) => {
     const last = lastAssigned[email];
     if (!last) return true;
     const diff = Math.floor((new Date(dateStr + "T00:00:00") - new Date(last + "T00:00:00")) / 86400000);
-    return diff >= minGap;
+    return diff > minGap;
   };
 
   // Pick best provider: sort by category count asc, then total asc, then gap desc
-  const pickBest = (candidates, dateStr, category, excludeEmails = [], minGap = 3) => {
+  const pickBest = (candidates, dateStr, category, excludeEmails = [], minGap = 4) => {
     let eligible = candidates.filter(p =>
       !excludeEmails.includes(p.email) &&
       !isBlocked(p.email, dateStr) &&
@@ -139,6 +141,7 @@ export default async function handler(req, res) {
     return `${p.name.replace("Dr. ", "")}: ${n}`;
   }).join(", ");
 
+  console.log("[generate-schedule] Final counts:", counts);
   return res.status(200).json({
     schedule,
     summary: `${monthName} ${year}: ${counts}. Code-enforced fair rotation.`
