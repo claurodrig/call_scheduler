@@ -862,8 +862,6 @@ export function PrintSchedulePage({ onBack }) {
     fetchProviders().then(setProviders);
   }, []);
 
-  const printFrameRef = useRef(null);
-
   const handlePrint = async () => {
     if (selectedMonths.length === 0) return;
     setLoading(true);
@@ -950,12 +948,23 @@ export function PrintSchedulePage({ onBack }) {
       </style>
     </head><body>${pagesHtml}</body></html>`;
 
-    const frame = printFrameRef.current;
-    frame.srcdoc = html;
-    frame.onload = () => {
-      frame.contentWindow.focus();
-      frame.contentWindow.print();
+    const newTab = window.open("", "_blank");
+    if (!newTab) {
+      alert("Please allow popups for this site to print schedules.");
+      return;
+    }
+    newTab.document.open();
+    newTab.document.write(html);
+    newTab.document.close();
+    // Wait for content to load then print
+    newTab.onload = () => {
+      newTab.focus();
+      newTab.print();
     };
+    // Fallback for browsers that don't fire onload on document.write
+    setTimeout(() => {
+      try { newTab.focus(); newTab.print(); } catch(e) {}
+    }, 800);
   };
 
   const renderCalendar = (year, month, scheduleData) => {
@@ -1052,7 +1061,6 @@ export function PrintSchedulePage({ onBack }) {
 
   return (
       <div style={{ paddingBottom: 20 }}>
-        <iframe ref={printFrameRef} style={{ display: "none" }} title="print-frame" />
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
           <button onClick={onBack} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", color: C.primary }}>‹</button>
           <span style={{ fontFamily: ff, fontWeight: 900, fontSize: 16, color: C.text }}>Print Schedule</span>
