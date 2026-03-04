@@ -1148,8 +1148,27 @@ function daysInMonth(year, month) {
 // Returns true if every calendar day in the month has a provider assigned
 function isMonthComplete(scheduleData, year, month) {
   const total = daysInMonth(year, month);
+  const today = new Date();
+  const isCurrentMonth = today.getFullYear() === year && today.getMonth() === month;
+  const isPastMonth = year < today.getFullYear() || (year === today.getFullYear() && month < today.getMonth());
+
+  // Find the first day that has a scheduled entry
+  let firstScheduledDay = null;
   for (let d = 1; d <= total; d++) {
-    const key = `${year}-${String(month + 1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+    const key = `${year}-${String(month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+    if (scheduleData[key]) { firstScheduledDay = d; break; }
+  }
+  if (!firstScheduledDay) return false;
+
+  // Check all days from first scheduled day onward
+  // For current month, only check up to today
+  const checkUntil = isCurrentMonth ? Math.min(total, today.getDate()) : total;
+
+  for (let d = firstScheduledDay; d <= checkUntil; d++) {
+    const date = new Date(year, month, d);
+    const dow = date.getDay();
+    if (dow === 0) continue; // Sundays mirror Saturday, skip
+    const key = `${year}-${String(month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
     if (!scheduleData[key]) return false;
   }
   return true;
