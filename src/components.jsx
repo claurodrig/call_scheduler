@@ -1,4 +1,4 @@
-import { useState, useEffect } from "rgit add .
+import { useState, useEffect } from "react";
 git commit -m "fix print new window build error"
 git push
 Days, getFirst,
