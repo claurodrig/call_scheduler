@@ -1594,18 +1594,18 @@ export function AdminPage({ onBack }) {
         return dateStr >= r.start_date && dateStr <= r.end_date;
       });
 
-    // Fetch full call history to rank by fairness
-    const allScheduleData = {};
-    for (const { date } of conflictDates) {
-      const d = new Date(date + "T00:00:00");
-      const key = `${d.getFullYear()}-${d.getMonth()}`;
-      if (!allScheduleData[key]) {
-        const data = await fetchSchedule(d.getFullYear(), d.getMonth());
-        Object.assign(allScheduleData, data);
-      }
+    // Fetch full call history across all months to rank by fairness
+    const now = new Date();
+    const historyFetches = [];
+    for (let i = 0; i <= 12; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      historyFetches.push(fetchSchedule(d.getFullYear(), d.getMonth()));
     }
+    const historyResults = await Promise.all(historyFetches);
+    const allScheduleData = {};
+    historyResults.forEach(data => Object.assign(allScheduleData, data));
 
-    // Count calls per provider from history
+    // Count calls per provider from full history
     const callCounts = {};
     const lastCallDate = {};
     for (const p of allProviders) { callCounts[p.email] = 0; lastCallDate[p.email] = null; }
@@ -1615,6 +1615,8 @@ export function AdminPage({ onBack }) {
       callCounts[email]++;
       if (!lastCallDate[email] || date > lastCallDate[email]) lastCallDate[email] = date;
     }
+
+    console.log("Conflict suggestion call counts:", JSON.stringify(callCounts));
 
     const requesterEmail = req.providers?.email;
 
