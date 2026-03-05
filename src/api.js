@@ -201,7 +201,7 @@ export async function executeCallSwitch(requestId, requesterProviderId, targetPr
   return true;
 }
 
-
+export async function updateScheduleDate(date, providerEmail) {
   const { data: provData } = await supabase
     .from("providers")
     .select("id")
