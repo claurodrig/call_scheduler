@@ -66,6 +66,61 @@ function LoginPage() {
   );
 }
 
+function SetPasswordPage({ onDone }) {
+  const [password, setPassword]   = useState("");
+  const [confirm, setConfirm]     = useState("");
+  const [error, setError]         = useState(null);
+  const [loading, setLoading]     = useState(false);
+  const [done, setDone]           = useState(false);
+
+  const handleSet = async () => {
+    if (password.length < 8) { setError("Password must be at least 8 characters."); return; }
+    if (password !== confirm) { setError("Passwords do not match."); return; }
+    setLoading(true);
+    setError(null);
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) { setError(error.message); setLoading(false); return; }
+    setDone(true);
+    setLoading(false);
+    // Clear invite hash from URL and navigate to app
+    window.history.replaceState(null, "", window.location.pathname);
+    setTimeout(() => onDone(), 1500);
+  };
+
+  return (
+    <div style={{minHeight:"100vh", background:C.bg, display:"flex", alignItems:"center", justifyContent:"center", fontFamily:ff}}>
+      <div style={{width:"100%", maxWidth:430, padding:"0 24px"}}>
+        <div style={{display:"flex", justifyContent:"center", padding:"48px 0 24px"}}>
+          <img src={logoSrc} alt="Beaches OBGYN" style={{height:64, objectFit:"contain"}}/>
+        </div>
+        <p style={{fontFamily:ff, fontWeight:900, fontSize:24, color:C.text, marginBottom:6, textAlign:"center"}}>Set Your Password</p>
+        <p style={{fontFamily:ffb, fontSize:13, color:C.sub, marginBottom:32, textAlign:"center"}}>Choose a password to activate your account</p>
+        <div style={card({padding:"24px"})}>
+          {done ? (
+            <p style={{fontFamily:ff, fontWeight:700, fontSize:14, color:C.teal, textAlign:"center"}}>
+              ✓ Password set! You are now signed in.
+            </p>
+          ) : <>
+            <div style={{marginBottom:16}}>
+              <span style={lblS}>New Password</span>
+              <input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="At least 8 characters" style={inpS}/>
+            </div>
+            <div style={{marginBottom:20}}>
+              <span style={lblS}>Confirm Password</span>
+              <input type="password" value={confirm} onChange={e=>setConfirm(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleSet()} placeholder="Repeat password" style={inpS}/>
+            </div>
+            {error && <p style={{fontFamily:ffb, fontSize:12, color:"#e05555", marginBottom:12, textAlign:"center"}}>{error}</p>}
+            <button onClick={handleSet} disabled={loading} style={btnS({opacity:loading?0.7:1})}>
+              {loading ? "Setting password..." : "Set Password & Sign In"}
+            </button>
+          </>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 export default function App() {
   const [session, setSession]                 = useState(null);
   const [authLoading, setAuthLoading]         = useState(true);
@@ -73,8 +128,15 @@ export default function App() {
   const [tab, setTab]                         = useState("home");
   const [sub, setSub]                         = useState(null);
   const [msgRecip, setMsgRecip]               = useState(null);
+  const [isInvite, setIsInvite]               = useState(false);
 
   useEffect(() => {
+    // Detect invite link (Supabase puts type=invite in the hash)
+    const hash = window.location.hash;
+    if (hash.includes("type=invite")) {
+      setIsInvite(true);
+    }
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setAuthLoading(false);
@@ -99,9 +161,11 @@ export default function App() {
     await supabase.auth.signOut();
     setSub(null);
     setTab("home");
+    setIsInvite(false);
   };
 
   if (authLoading) return null;
+  if (isInvite && session) return <SetPasswordPage onDone={() => setIsInvite(false)}/>;
   if (!session) return <LoginPage/>;
 
   const onMessage = p => { setMsgRecip(p); setSub("messages"); };
