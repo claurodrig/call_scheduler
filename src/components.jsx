@@ -2526,11 +2526,13 @@ export function FairnessPage({ onBack }) {
   };
 
   const INTERVALS = [
-    { key: "past3",     label: "Past 3 mo",    start: shiftMonths(today, -3), end: today },
-    { key: "past6",     label: "Past 6 mo",    start: shiftMonths(today, -6), end: today },
+    { key: "past3",     label: "Past 3 mo",    start: shiftMonths(today, -3),  end: today },
+    { key: "past6",     label: "Past 6 mo",    start: shiftMonths(today, -6),  end: today },
     { key: "past12",    label: "Past 12 mo",   start: shiftMonths(today, -12), end: today },
     { key: "future3",   label: "Next 3 mo",    start: today, end: shiftMonths(today, 3) },
     { key: "future6",   label: "Next 6 mo",    start: today, end: shiftMonths(today, 6) },
+    { key: "future9",   label: "Next 9 mo",    start: today, end: shiftMonths(today, 9) },
+    { key: "future12",  label: "Next 12 mo",   start: today, end: shiftMonths(today, 12) },
   ];
 
   const selectedInterval = INTERVALS.find(i => i.key === interval);
