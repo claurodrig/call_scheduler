@@ -807,7 +807,6 @@ export function RequestPage({ currentProvider }) {
                 <button
                   style={btnS({ flex: 1, padding: "9px", fontSize: 12, background: "#65b896" })}
                   onClick={async () => {
-                    console.log("Accept Swap clicked", { id: r.id, provider_id: r.provider_id, target_provider_id: r.target_provider_id, start_date: r.start_date, end_date: r.end_date, currentProviderId: currentProvider.id });
                     // Execute the actual schedule swap
                     const ok = await executeCallSwitch(
                       r.id,
