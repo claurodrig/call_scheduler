@@ -103,13 +103,17 @@ export function IcoScale({color}) {
 
 export function Avatar({ p, size=40, ring=false }) {
   if (p.avatar_url) {
+    // Strip any existing timestamp and add a fresh one based on the URL itself
+    // so the same URL always shows the latest image without browser caching issues
+    const baseUrl = p.avatar_url.split("?")[0];
+    const src = `${baseUrl}?t=${encodeURIComponent(baseUrl.slice(-8))}`;
     return (
       <div style={{
         width:size, height:size, borderRadius:"50%", flexShrink:0,
         outline:ring?`3px solid ${p.color}55`:"none", outlineOffset:2,
         overflow:"hidden"
       }}>
-        <img src={p.avatar_url} alt={p.name} style={{width:"100%", height:"100%", objectFit:"cover"}}/>
+        <img src={src} alt={p.name} style={{width:"100%", height:"100%", objectFit:"cover"}}/>
       </div>
     );
   }

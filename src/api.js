@@ -158,13 +158,15 @@ export async function uploadAvatar(providerId, file) {
     .upload(path, file, { upsert: true, contentType: file.type });
   if (uploadError) { console.error("uploadAvatar:", uploadError); return null; }
   const { data } = supabase.storage.from("provider-avatars").getPublicUrl(path);
-  const url = `${data.publicUrl}?t=${Date.now()}`;
+  // Store clean URL in DB, no timestamp
+  const cleanUrl = data.publicUrl;
   const { error: updateError } = await supabase
     .from("providers")
-    .update({ avatar_url: url })
+    .update({ avatar_url: cleanUrl })
     .eq("id", providerId);
   if (updateError) { console.error("updateAvatar:", updateError); return null; }
-  return url;
+  // Return URL with cache-bust so the uploader sees new photo immediately
+  return `${cleanUrl}?t=${Date.now()}`;
 }
 
 export async function updateScheduleDate(date, providerEmail) {
