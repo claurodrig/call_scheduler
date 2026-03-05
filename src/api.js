@@ -149,7 +149,23 @@ export async function updateNoCallDayStatus(requestId, status, providerId, day) 
   }
   return !error;
 }
-export async function updateScheduleDate(date, providerEmail) {
+export async function uploadAvatar(providerId, file) {
+  const ext = file.name.split(".").pop();
+  const path = `avatars/${providerId}.${ext}`;
+  const { error: uploadError } = await supabase.storage
+    .from("provider-avatars")
+    .upload(path, file, { upsert: true, contentType: file.type });
+  if (uploadError) { console.error("uploadAvatar:", uploadError); return null; }
+  const { data } = supabase.storage.from("provider-avatars").getPublicUrl(path);
+  // Add cache-busting so new photo shows immediately
+  const url = `${data.publicUrl}?t=${Date.now()}`;
+  const { error: updateError } = await supabase
+    .from("providers")
+    .update({ avatar_url: url })
+    .eq("id", providerId);
+  if (updateError) { console.error("updateAvatar:", updateError); return null; }
+  return url;
+}
   const { data: provData } = await supabase
     .from("providers")
     .select("id")

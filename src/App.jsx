@@ -177,7 +177,7 @@ export default function App() {
     if (sub === "vacations") return <UpcomingVacationsPage onBack={()=>setSub(null)}/>;
     if (sub === "logic")     return <CallLogicPage onBack={()=>setSub(null)} currentProvider={currentProvider}/>;
     if (sub === "print")     return <PrintSchedulePage onBack={()=>setSub(null)}/>;
-    if (sub === "settings")  return <SettingsPage onBack={()=>setSub(null)} onLogout={handleLogout} currentProvider={currentProvider}/>;
+    if (sub === "settings")  return <SettingsPage onBack={()=>setSub(null)} onLogout={handleLogout} currentProvider={currentProvider} onProviderUpdate={setCurrentProvider}/>;
     if (tab === "home")      return <HomePage/>;
     if (tab === "providers") return <ProvidersPage onMessage={onMessage} currentProvider={currentProvider}/>;
     if (tab === "request")   return <RequestPage currentProvider={currentProvider}/>;

@@ -4,7 +4,7 @@ import {
   ff, ffb, dkey, getDays, getFirst,
   card, btnS, oBtnS, inpS, lblS, badge
 } from "./data";
-import { fetchSchedule, fetchProviders, fetchRequests, submitRequest, updateRequestStatus, fetchMessages, sendMessage, generateSchedule, saveGeneratedSchedule, cancelRequest, fetchNoCallDayRequests, submitNoCallDayRequest, updateNoCallDayStatus, fetchIncomingSwitchRequests, updateScheduleDate } from "./api";
+import { fetchSchedule, fetchProviders, fetchRequests, submitRequest, updateRequestStatus, fetchMessages, sendMessage, generateSchedule, saveGeneratedSchedule, cancelRequest, fetchNoCallDayRequests, submitNoCallDayRequest, updateNoCallDayStatus, fetchIncomingSwitchRequests, updateScheduleDate, uploadAvatar } from "./api";
 import { supabase } from "./supabase";
 
 export function IcoHome({color}) {
@@ -2244,9 +2244,26 @@ export function MessagesPage({ recipient, onBack, currentProvider }) {
   );
 }
 
-export function SettingsPage({ onBack, onLogout, currentProvider }) {
-  const [faceId,setFaceId] = useState(true);
-  const [notifs,setNotifs] = useState({all:true, published:true, changes:true, messages:true});
+export function SettingsPage({ onBack, onLogout, currentProvider, onProviderUpdate }) {
+  const [faceId, setFaceId]         = useState(true);
+  const [notifs, setNotifs]         = useState({all:true, published:true, changes:true, messages:true});
+  const [uploading, setUploading]   = useState(false);
+  const [avatarUrl, setAvatarUrl]   = useState(currentProvider?.avatar_url || null);
+  const fileInputRef                = useRef(null);
+
+  const handlePhotoClick = () => fileInputRef.current?.click();
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !currentProvider?.id) return;
+    setUploading(true);
+    const url = await uploadAvatar(currentProvider.id, file);
+    if (url) {
+      setAvatarUrl(url);
+      onProviderUpdate?.({ ...currentProvider, avatar_url: url });
+    }
+    setUploading(false);
+  };
 
   return (
     <div style={{paddingBottom:20}}>
@@ -2255,11 +2272,36 @@ export function SettingsPage({ onBack, onLogout, currentProvider }) {
         <span style={{fontFamily:ff, fontWeight:900, fontSize:16, color:C.text}}>Settings</span>
       </div>
       <div style={card({padding:"16px", marginBottom:12})}>
+        {/* Avatar with tap-to-change */}
         <div style={{display:"flex", alignItems:"center", gap:14, marginBottom:14}}>
-          {currentProvider && <Avatar p={currentProvider} size={50} ring/>}
+          <div style={{position:"relative", cursor:"pointer"}} onClick={handlePhotoClick}>
+            {avatarUrl
+              ? <img src={avatarUrl} alt="avatar" style={{width:60, height:60, borderRadius:"50%", objectFit:"cover", border:`3px solid ${C.teal}`}}/>
+              : <Avatar p={currentProvider} size={60} ring/>
+            }
+            <div style={{
+              position:"absolute", bottom:0, right:0,
+              background: C.teal, borderRadius:"50%",
+              width:22, height:22, display:"flex", alignItems:"center", justifyContent:"center",
+              border:"2px solid #fff", fontSize:12,
+            }}>
+              {uploading ? "…" : "📷"}
+            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              capture="user"
+              onChange={handleFileChange}
+              style={{display:"none"}}
+            />
+          </div>
           <div>
             <p style={{margin:0, fontFamily:ff, fontWeight:800, fontSize:15, color:C.text}}>{currentProvider?.name}</p>
             <p style={{margin:"3px 0 0", fontFamily:ffb, fontSize:12, color:C.sub}}>{currentProvider?.email}</p>
+            <p style={{margin:"4px 0 0", fontFamily:ffb, fontSize:11, color:C.teal, cursor:"pointer"}} onClick={handlePhotoClick}>
+              {uploading ? "Uploading..." : "Tap photo to change"}
+            </p>
           </div>
         </div>
         {["Full Name","Phone Number","Display Name"].map(f => (
