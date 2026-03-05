@@ -170,17 +170,23 @@ export async function uploadAvatar(providerId, file) {
 }
 
 export async function executeCallSwitch(requestId, requesterProviderId, targetProviderId, requesterDate, targetDate) {
+  console.log("executeCallSwitch:", { requestId, requesterProviderId, targetProviderId, requesterDate, targetDate });
+
   // Swap the two dates in the schedule
-  const { error: e1 } = await supabase
+  const { data: d1, error: e1 } = await supabase
     .from("call_schedule")
     .update({ provider_id: targetProviderId })
-    .eq("date", requesterDate);
+    .eq("date", requesterDate)
+    .select();
+  console.log("Swap requesterDate result:", { d1, e1 });
   if (e1) { console.error("executeCallSwitch e1:", e1); return false; }
 
-  const { error: e2 } = await supabase
+  const { data: d2, error: e2 } = await supabase
     .from("call_schedule")
     .update({ provider_id: requesterProviderId })
-    .eq("date", targetDate);
+    .eq("date", targetDate)
+    .select();
+  console.log("Swap targetDate result:", { d2, e2 });
   if (e2) { console.error("executeCallSwitch e2:", e2); return false; }
 
   // If either date is a Saturday, mirror to Sunday
