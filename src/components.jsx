@@ -1866,16 +1866,38 @@ export function AdminPage({ onBack }) {
     setConflictModal({ requestId: id, conflicts, selections, hardBlocked, req });
   };
 
+  const [conflictSaving, setConflictSaving] = useState(false);
+
   const handleConflictConfirm = async () => {
     const { requestId, conflicts, selections } = conflictModal;
-    // Update each conflicting date in the schedule
-    await Promise.all(
-      conflicts.filter(c => !c.blocked).map(({ date }) =>
-        updateScheduleDate(date, selections[date])
-      )
-    );
+    setConflictSaving(true);
+    
+    console.log("Confirming conflict resolution:", selections);
+
+    const updates = conflicts.filter(c => !c.blocked).map(({ date }) => ({
+      date,
+      email: selections[date]
+    }));
+
+    for (const { date, email } of updates) {
+      if (!email) { console.error("No email for date", date); continue; }
+      console.log(`Updating ${date} → ${email}`);
+      const ok = await updateScheduleDate(date, email);
+      if (!ok) console.error("Failed to update", date, email);
+
+      // If Saturday, also update the mirrored Sunday
+      const d = new Date(date + "T00:00:00");
+      if (d.getDay() === 6) {
+        const sunDate = new Date(d);
+        sunDate.setDate(sunDate.getDate() + 1);
+        const sunStr = `${sunDate.getFullYear()}-${String(sunDate.getMonth()+1).padStart(2,"0")}-${String(sunDate.getDate()).padStart(2,"0")}`;
+        await updateScheduleDate(sunStr, email);
+      }
+    }
+
     await updateRequestStatus(requestId, "Approved");
     fetchRequests().then(setReqs);
+    setConflictSaving(false);
     setConflictModal(null);
   };
 
@@ -1936,7 +1958,9 @@ export function AdminPage({ onBack }) {
               ))}
 
               {hardBlocked.length === 0 && (
-                <button style={btnS({marginBottom:8})} onClick={handleConflictConfirm}>Confirm & Approve</button>
+                <button style={btnS({marginBottom:8, opacity: conflictSaving ? 0.7 : 1})} onClick={handleConflictConfirm} disabled={conflictSaving}>
+                  {conflictSaving ? "Saving..." : "Confirm & Approve"}
+                </button>
               )}
               <button style={{...oBtnS(), width:"100%"}} onClick={()=>setConflictModal(null)}>Cancel</button>
             </div>
