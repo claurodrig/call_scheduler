@@ -46,8 +46,8 @@ export function IcoMore({color}) {
 export function IcoBell({color}) {
   return (
     <svg width={22} height={22} viewBox="0 0 24 24" fill="none">
-      <path d="M12 2a7 7 0 0 0-7 7v4l-2 2.5h18L19 13V9a7 7 0 0 0-7-7z" stroke={color} strokeWidth={2} strokeLinejoin="round"/>
-      <path d="M10 19a2 2 0 0 0 4 0" stroke={color} strokeWidth={2} strokeLinecap="round"/>
+      <path d="M12 2C8.13 2 5 5.13 5 9v5l-1.5 1.5A1 1 0 0 0 4 17h16a1 1 0 0 0 .71-1.71L19 14V9c0-3.87-3.13-7-7-7z" fill={color}/>
+      <path d="M12 22a2 2 0 0 0 2-2h-4a2 2 0 0 0 2 2z" fill={color}/>
     </svg>
   );
 }
