@@ -2371,7 +2371,9 @@ export function NotificationsPage({ onBack, currentProvider, onNavigate }) {
   };
 
   const getAction = (title) => {
-    if (title?.includes("Request") || title?.includes("Switch") || title?.includes("Approved") || title?.includes("Denied") || title?.includes("Accepted") || title?.includes("Declined")) return "my-requests";
+    if (title?.includes("New Time-Off Request") || title?.includes("New No-Call")) return "admin-requests";
+    if (title?.includes("Switch Accepted") || title?.includes("Switch Declined") || title?.includes("Approved") || title?.includes("Denied")) return "my-requests";
+    if (title?.includes("Call Switch Request")) return "my-requests";
     if (title?.includes("Schedule")) return "home";
     if (title?.includes("Message")) return "messages";
     return null;
