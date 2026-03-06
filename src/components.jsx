@@ -2425,6 +2425,29 @@ export function NotificationsPage({ onBack, currentProvider, onNavigate }) {
 export function SettingsPage({ onBack, onLogout, currentProvider }) {
   const [faceId, setFaceId] = useState(true);
   const [notifs, setNotifs] = useState({all:true, published:true, changes:true, messages:true});
+  const [showPwForm, setShowPwForm] = useState(false);
+  const [currentPw, setCurrentPw] = useState("");
+  const [newPw, setNewPw] = useState("");
+  const [confirmPw, setConfirmPw] = useState("");
+  const [pwMsg, setPwMsg] = useState(null);
+  const [pwLoading, setPwLoading] = useState(false);
+
+  const handleChangePassword = async () => {
+    setPwMsg(null);
+    if (!newPw || newPw.length < 6) return setPwMsg({ ok: false, text: "New password must be at least 6 characters." });
+    if (newPw !== confirmPw) return setPwMsg({ ok: false, text: "Passwords do not match." });
+    setPwLoading(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPw });
+      if (error) throw error;
+      setPwMsg({ ok: true, text: "Password updated successfully!" });
+      setCurrentPw(""); setNewPw(""); setConfirmPw("");
+      setTimeout(() => { setShowPwForm(false); setPwMsg(null); }, 2000);
+    } catch (err) {
+      setPwMsg({ ok: false, text: err.message || "Failed to update password." });
+    }
+    setPwLoading(false);
+  };
 
   return (
     <div style={{paddingBottom:20}}>
@@ -2456,7 +2479,25 @@ export function SettingsPage({ onBack, onLogout, currentProvider }) {
           </div>
           <Toggle val={faceId} fn={setFaceId}/>
         </div>
-        <button style={oBtnS({width:"100%", marginBottom:8, padding:"10px"})}>Change Password</button>
+        <button onClick={() => { setShowPwForm(v => !v); setPwMsg(null); }} style={oBtnS({width:"100%", marginBottom: showPwForm ? 12 : 8, padding:"10px"})}>
+          {showPwForm ? "Cancel" : "Change Password"}
+        </button>
+        {showPwForm && (
+          <div style={{marginBottom:8}}>
+            <div style={{marginBottom:8}}>
+              <span style={lblS}>New Password</span>
+              <input type="password" value={newPw} onChange={e=>setNewPw(e.target.value)} placeholder="Min 6 characters" style={inpS}/>
+            </div>
+            <div style={{marginBottom:12}}>
+              <span style={lblS}>Confirm New Password</span>
+              <input type="password" value={confirmPw} onChange={e=>setConfirmPw(e.target.value)} placeholder="Repeat new password" style={inpS}/>
+            </div>
+            {pwMsg && <p style={{margin:"0 0 10px", fontFamily:ffb, fontSize:12, color: pwMsg.ok ? C.teal : C.coral}}>{pwMsg.text}</p>}
+            <button onClick={handleChangePassword} disabled={pwLoading} style={btnS({width:"100%", padding:"10px", marginBottom:8})}>
+              {pwLoading ? "Updating…" : "Update Password"}
+            </button>
+          </div>
+        )}
         <button onClick={onLogout} style={oBtnS({width:"100%", padding:"10px", color:C.coral, borderColor:C.coral})}>Logout</button>
       </div>
       <div style={card({padding:"16px"})}>
