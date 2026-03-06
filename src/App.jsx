@@ -156,15 +156,20 @@ export default function App() {
       console.log("SW message received:", event.data);
       if (event.data?.type === "NOTIF_NAV") {
         const action = event.data.action;
-        if (action === "admin-requests") { setSub("admin"); }
+        if (action === "admin-requests") setSub("admin");
         else if (action === "my-requests") { setSub(null); setTab("request"); }
         else if (action === "messages") { setSub(null); setTab("request"); }
         else if (action === "home") { setSub(null); setTab("home"); }
       }
     };
+    // Use both - some browsers use one or the other
     navigator.serviceWorker.addEventListener("message", handler);
-    return () => navigator.serviceWorker.removeEventListener("message", handler);
-  }, [setSub, setTab]);
+    window.addEventListener("message", handler);
+    return () => {
+      navigator.serviceWorker.removeEventListener("message", handler);
+      window.removeEventListener("message", handler);
+    };
+  }, []);
 
   // Handle ?action= param when app opens fresh from notification tap
   useEffect(() => {
