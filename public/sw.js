@@ -17,14 +17,14 @@ self.addEventListener("notificationclick", event => {
   const data = event.notification.data || {};
   const action = data.action || "home";
 
+  // Broadcast to all tabs via BroadcastChannel
+  const bc = new BroadcastChannel("notif_nav");
+  bc.postMessage({ type: "NOTIF_NAV", action });
+  bc.close();
+
   event.waitUntil(
     clients.matchAll({ type: "window", includeUncontrolled: true }).then(clientList => {
-      const msg = { type: "NOTIF_NAV", action };
-      if (clientList.length > 0) {
-        const client = clientList[0];
-        client.postMessage(msg);
-        return client.focus();
-      }
+      if (clientList.length > 0) return clientList[0].focus();
       return clients.openWindow("/?action=" + action);
     })
   );

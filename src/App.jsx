@@ -149,26 +149,18 @@ export default function App() {
   const [isInvite, setIsInvite]               = useState(false);
   const [unreadCount, setUnreadCount]         = useState(0);
 
-  // Listen for notification tap navigation from service worker
+  // Listen for notification tap navigation via BroadcastChannel
   useEffect(() => {
-    if (!("serviceWorker" in navigator)) return;
-    const handler = (event) => {
-      console.log("SW message received:", event.data);
-      if (event.data?.type === "NOTIF_NAV") {
-        const action = event.data.action;
-        if (action === "admin-requests") setSub("admin");
-        else if (action === "my-requests") { setSub(null); setTab("request"); }
-        else if (action === "messages") { setSub(null); setTab("request"); }
-        else if (action === "home") { setSub(null); setTab("home"); }
-      }
+    const bc = new BroadcastChannel("notif_nav");
+    bc.onmessage = (event) => {
+      console.log("NOTIF_NAV received:", event.data);
+      const action = event.data?.action;
+      if (action === "admin-requests") setSub("admin");
+      else if (action === "my-requests") { setSub(null); setTab("request"); }
+      else if (action === "messages") { setSub(null); setTab("request"); }
+      else if (action === "home") { setSub(null); setTab("home"); }
     };
-    // Use both - some browsers use one or the other
-    navigator.serviceWorker.addEventListener("message", handler);
-    window.addEventListener("message", handler);
-    return () => {
-      navigator.serviceWorker.removeEventListener("message", handler);
-      window.removeEventListener("message", handler);
-    };
+    return () => bc.close();
   }, []);
 
   // Handle ?action= param when app opens fresh from notification tap
