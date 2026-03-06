@@ -243,7 +243,12 @@ export default function App() {
     if (sub === "logic")         return <CallLogicPage onBack={()=>setSub(null)} currentProvider={currentProvider}/>;
     if (sub === "print")         return <PrintSchedulePage onBack={()=>setSub(null)}/>;
     if (sub === "settings")      return <SettingsPage onBack={()=>setSub(null)} onLogout={handleLogout} currentProvider={currentProvider}/>;
-    if (sub === "notifications") return <NotificationsPage onBack={()=>setSub(null)} currentProvider={currentProvider}/>;
+    if (sub === "notifications") return <NotificationsPage onBack={()=>setSub(null)} currentProvider={currentProvider} onNavigate={(action) => {
+      if (action === "admin-requests") setSub("admin");
+      else if (action === "my-requests") { setSub(null); setTab("request"); }
+      else if (action === "messages") { setSub(null); setTab("providers"); }
+      else if (action === "home") { setSub(null); setTab("home"); }
+    }}/>;
     if (tab === "home")      return <HomePage/>;
     if (tab === "providers") return <ProvidersPage onMessage={onMessage} currentProvider={currentProvider}/>;
     if (tab === "request")   return <RequestPage currentProvider={currentProvider}/>;

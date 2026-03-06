@@ -2349,7 +2349,7 @@ export function MessagesPage({ recipient, onBack, currentProvider }) {
   );
 }
 
-export function NotificationsPage({ onBack, currentProvider }) {
+export function NotificationsPage({ onBack, currentProvider, onNavigate }) {
   const [notifs, setNotifs] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -2359,7 +2359,6 @@ export function NotificationsPage({ onBack, currentProvider }) {
       setNotifs(data);
       setLoading(false);
     });
-    // Mark all as read when page opens
     markNotificationsRead(currentProvider.id);
   }, [currentProvider]);
 
@@ -2369,6 +2368,18 @@ export function NotificationsPage({ onBack, currentProvider }) {
     if (diff < 3600) return `${Math.floor(diff/60)}m ago`;
     if (diff < 86400) return `${Math.floor(diff/3600)}h ago`;
     return `${Math.floor(diff/86400)}d ago`;
+  };
+
+  const getAction = (title) => {
+    if (title?.includes("Request") || title?.includes("Switch") || title?.includes("Approved") || title?.includes("Denied") || title?.includes("Accepted") || title?.includes("Declined")) return "my-requests";
+    if (title?.includes("Schedule")) return "home";
+    if (title?.includes("Message")) return "messages";
+    return null;
+  };
+
+  const handleTap = (n) => {
+    const action = getAction(n.title);
+    if (action && onNavigate) onNavigate(action);
   };
 
   return (
@@ -2385,19 +2396,26 @@ export function NotificationsPage({ onBack, currentProvider }) {
           <p style={{fontFamily:ffb, fontSize:12, color:C.sub, margin:0}}>No notifications yet</p>
         </div>
       )}
-      {notifs.map(n => (
-        <div key={n.id} style={card({
-          padding:"13px 16px", marginBottom:10,
-          borderLeft: n.read ? "none" : `3px solid ${C.teal}`,
-          background: n.read ? "#fff" : `${C.wave}88`,
-        })}>
-          <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start"}}>
-            <p style={{margin:"0 0 3px", fontFamily:ff, fontWeight:800, fontSize:13, color:C.text}}>{n.title}</p>
-            <span style={{fontFamily:ffb, fontSize:10, color:C.sub, flexShrink:0, marginLeft:8}}>{timeAgo(n.created_at)}</span>
+      {notifs.map(n => {
+        const action = getAction(n.title);
+        return (
+          <div key={n.id} onClick={() => handleTap(n)} style={card({
+            padding:"13px 16px", marginBottom:10,
+            borderLeft: n.read ? "none" : `3px solid ${C.teal}`,
+            background: n.read ? "#fff" : `${C.wave}88`,
+            cursor: action ? "pointer" : "default",
+          })}>
+            <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start"}}>
+              <p style={{margin:"0 0 3px", fontFamily:ff, fontWeight:800, fontSize:13, color:C.text}}>{n.title}</p>
+              <div style={{display:"flex", alignItems:"center", gap:6, flexShrink:0, marginLeft:8}}>
+                <span style={{fontFamily:ffb, fontSize:10, color:C.sub}}>{timeAgo(n.created_at)}</span>
+                {action && <span style={{fontSize:12, color:C.teal}}>›</span>}
+              </div>
+            </div>
+            <p style={{margin:0, fontFamily:ffb, fontSize:12, color:C.sub}}>{n.body}</p>
           </div>
-          <p style={{margin:0, fontFamily:ffb, fontSize:12, color:C.sub}}>{n.body}</p>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
