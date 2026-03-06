@@ -466,6 +466,7 @@ export function RequestPage({ currentProvider }) {
           providerIds: adminIds,
           title: "New Time-Off Request",
           body: `${currentProvider.name} requested ${type} from ${start} to ${end}`,
+          data: { action: "admin-requests" },
         });
       }
       setTimeout(() => setDone(false), 2500);
@@ -552,6 +553,7 @@ export function RequestPage({ currentProvider }) {
           providerIds: [provOnSwitchTo.id],
           title: "Call Switch Request",
           body: `${currentProvider.name} wants to swap their call on ${switchDate} with yours on ${switchToDate}`,
+          data: { action: "my-requests" },
         });
       }
       setTimeout(() => setDone(false), 2500);
@@ -843,6 +845,7 @@ export function RequestPage({ currentProvider }) {
                         providerIds: [r.provider_id],
                         title: "Call Switch Accepted ✓",
                         body: `${currentProvider.name} accepted your switch request`,
+                        data: { action: "my-requests" },
                       });
                     }
                   }}
@@ -859,6 +862,7 @@ export function RequestPage({ currentProvider }) {
                       providerIds: [r.provider_id],
                       title: "Call Switch Declined",
                       body: `${currentProvider.name} declined your switch request`,
+                      data: { action: "my-requests" },
                     });
                   }}
                 >
@@ -1559,6 +1563,7 @@ function AIScheduleGenerator() {
         providerIds: providers.map(p => p.id),
         title: "Schedule Published 📅",
         body: `The call schedule for ${monthNames} is now available`,
+        data: { action: "home" },
       });
     } catch(err) {
       setError("Something went wrong. Please try again.");
@@ -1812,6 +1817,7 @@ export function AdminPage({ onBack }) {
           providerIds: [req.provider_id],
           title: "Request Update",
           body: `Your ${req.type} request from ${req.start_date} to ${req.end_date} was denied`,
+          data: { action: "my-requests" },
         });
       }
       return;
@@ -1983,6 +1989,7 @@ export function AdminPage({ onBack }) {
         providerIds: [req.provider_id],
         title: "Request Approved ✓",
         body: `Your ${req.type} request from ${req.start_date} to ${req.end_date} was approved`,
+        data: { action: "my-requests" },
       });
     }
 
@@ -2299,6 +2306,7 @@ export function MessagesPage({ recipient, onBack, currentProvider }) {
         providerIds: [recipient.id],
         title: `Message from ${currentProvider.name}`,
         body: txt.trim().length > 60 ? txt.trim().slice(0, 60) + "…" : txt.trim(),
+        data: { action: "messages", senderId: currentProvider.id },
       });
     }
     setTxt("");

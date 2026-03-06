@@ -149,7 +149,31 @@ export default function App() {
   const [isInvite, setIsInvite]               = useState(false);
   const [unreadCount, setUnreadCount]         = useState(0);
 
-  // Poll for unread notifications every 30 seconds
+  // Listen for notification tap navigation from service worker
+  useEffect(() => {
+    const handler = (event) => {
+      if (event.data?.type === "NOTIF_NAV") {
+        const action = event.data.action;
+        if (action === "admin-requests") { setSub("admin"); }
+        else if (action === "my-requests") { setSub(null); setTab("request"); }
+        else if (action === "messages") { setSub(null); setTab("request"); }
+        else if (action === "home") { setSub(null); setTab("home"); }
+      }
+    };
+    navigator.serviceWorker?.addEventListener("message", handler);
+    return () => navigator.serviceWorker?.removeEventListener("message", handler);
+  }, []);
+
+  // Handle ?action= param when app opens fresh from notification tap
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const action = params.get("action");
+    if (!action) return;
+    window.history.replaceState({}, "", "/");
+    if (action === "admin-requests") setSub("admin");
+    else if (action === "my-requests") { setSub(null); setTab("request"); }
+    else if (action === "home") { setSub(null); setTab("home"); }
+  }, []);
   useEffect(() => {
     if (!currentProvider) return;
     const refresh = () => fetchNotifications(currentProvider.id).then(notifs => {
