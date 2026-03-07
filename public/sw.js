@@ -1,3 +1,12 @@
+// Bypass cache entirely for print.html — always fetch from network
+self.addEventListener("fetch", event => {
+  if (event.request.url.includes("/print.html")) {
+    event.respondWith(fetch(event.request));
+    return;
+  }
+  // Default browser behavior for everything else
+});
+
 self.addEventListener("push", event => {
   if (!event.data) return;
   const { title, body, data } = event.data.json();
@@ -28,11 +37,9 @@ self.addEventListener("notificationclick", event => {
       if (clientList.length > 0) {
         const client = clientList[0];
         return client.focus().then(() => {
-          // Wait for app to be ready after focus
           setTimeout(sendNav, 500);
         });
       } else {
-        // App wasn't open, opening fresh - wait longer for it to load
         return clients.openWindow("/?action=" + action).then(() => {
           setTimeout(sendNav, 1500);
         });
