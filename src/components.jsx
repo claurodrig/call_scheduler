@@ -1092,30 +1092,22 @@ export function PrintSchedulePage({ onBack }) {
       </div>`;
     }).join("");
 
-    // Remove existing print elements
-    document.getElementById("print-root")?.remove();
-    document.getElementById("print-hide-app")?.remove();
+    // Swap entire body content with print content (works on iOS PWA)
+    const originalBody = document.body.innerHTML;
+    document.body.innerHTML = `
+      <style>
+        * { margin:0; padding:0; box-sizing:border-box; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+        body { background:#fff; font-family:-apple-system,Helvetica,sans-serif; }
+        @page { margin:0.3in; }
+      </style>
+      ${pagesHtml}
+    `;
 
-    // Inject print div directly into body (outside #root)
-    const printDiv = document.createElement("div");
-    printDiv.id = "print-root";
-    printDiv.style.cssText = "display:none;";
-    printDiv.innerHTML = pagesHtml;
-    document.body.appendChild(printDiv);
+    window.print();
 
-    // Inject print styles
-    const style = document.createElement("style");
-    style.id = "print-hide-app";
-    style.textContent = `@media print { #root { display:none !important; } #print-root { display:block !important; } @page { margin:0; } * { -webkit-print-color-adjust:exact; print-color-adjust:exact; } }`;
-    document.head.appendChild(style);
-
-    setTimeout(() => {
-      window.print();
-      setTimeout(() => {
-        document.getElementById("print-hide-app")?.remove();
-        document.getElementById("print-root")?.remove();
-      }, 1000);
-    }, 200);
+    // Restore app
+    document.body.innerHTML = originalBody;
+    window.location.reload();
   };
 
   return (
