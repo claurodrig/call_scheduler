@@ -7,26 +7,25 @@
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; font-family: -apple-system, Helvetica, sans-serif; }
     body { background: #fff; }
-    @page { margin: 0.3in; size: landscape; }
-    .page { width: 100%; min-height: 100vh; background: #fff; page-break-after: always; display: flex; flex-direction: column; padding: 10px 12px; }
-    .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; border-bottom: 2px solid #1a8c78; padding-bottom: 6px; }
-    .header-left { display: flex; align-items: center; gap: 8px; }
-    .logo-text { font-weight: 900; font-size: 16px; color: #1a8c78; }
-    .month-title { font-size: 20px; font-weight: 900; color: #1a3a35; }
-    .month-sub { font-size: 9px; color: #888; text-align: right; }
-    .weekdays { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; margin-bottom: 2px; }
-    .weekday { text-align: center; padding: 2px 0; font-size: 9px; font-weight: 900; background: #f0faf8; border-radius: 3px; }
-    .calendar { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; flex: 1; }
-    .cell { border-radius: 4px; padding: 3px 4px; display: flex; flex-direction: column; overflow: hidden; min-height: 60px; }
-    .cell-empty { background: #fafafa; border-radius: 4px; }
-    .day-num { font-size: 11px; font-weight: 800; margin-bottom: 2px; }
-    .avatar { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; margin-bottom: 2px; display: block; }
-    .avatar-initial { width: 22px; height: 22px; border-radius: 50%; margin-bottom: 2px; display: flex; align-items: center; justify-content: center; font-size: 8px; font-weight: 900; color: #fff; }
-    .prov-name { font-size: 8px; font-weight: 700; color: #333; line-height: 1.2; }
-    .legend { margin-top: 6px; padding-top: 5px; border-top: 1px solid #e8e8e8; display: flex; flex-wrap: wrap; gap: 3px 12px; }
-    .legend-item { display: flex; align-items: center; gap: 4px; font-size: 8px; color: #555; font-weight: 600; }
-    .legend-avatar { width: 12px; height: 12px; border-radius: 50%; object-fit: cover; }
-    .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+    @page { margin: 0.4in 0.35in; size: portrait; }
+    .page { width: 100%; height: 100vh; background: #fff; page-break-after: always; page-break-inside: avoid; display: flex; flex-direction: column; }
+    .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; border-bottom: 2.5px solid #1a8c78; padding-bottom: 8px; flex-shrink: 0; }
+    .logo-text { font-weight: 900; font-size: 18px; color: #1a8c78; }
+    .month-title { font-size: 24px; font-weight: 900; color: #1a3a35; }
+    .month-sub { font-size: 10px; color: #888; text-align: right; margin-top: 1px; }
+    .weekdays { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; margin-bottom: 3px; flex-shrink: 0; }
+    .weekday { text-align: center; padding: 4px 0; font-size: 10px; font-weight: 900; background: #f0faf8; border-radius: 4px; }
+    .calendar { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; flex: 1; }
+    .cell { border-radius: 5px; padding: 5px 6px; display: flex; flex-direction: column; overflow: hidden; }
+    .cell-empty { background: #f9f9f9; border-radius: 5px; border: 1px solid #f0f0f0; }
+    .day-num { font-size: 13px; font-weight: 900; margin-bottom: 4px; }
+    .avatar { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; margin-bottom: 3px; display: block; }
+    .avatar-initial { width: 28px; height: 28px; border-radius: 50%; margin-bottom: 3px; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 900; color: #fff; }
+    .prov-name { font-size: 9px; font-weight: 700; color: #333; line-height: 1.3; }
+    .legend { margin-top: 8px; padding-top: 7px; border-top: 1px solid #e0e0e0; display: flex; flex-wrap: wrap; gap: 4px 16px; flex-shrink: 0; }
+    .legend-item { display: flex; align-items: center; gap: 5px; font-size: 9px; color: #444; font-weight: 600; }
+    .legend-avatar { width: 14px; height: 14px; border-radius: 50%; object-fit: cover; }
+    .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
     .preparing { display: flex; align-items: center; justify-content: center; min-height: 100vh; font-size: 16px; color: #555; }
   </style>
 </head>
@@ -42,12 +41,11 @@
     function render() {
       let raw;
       try { raw = localStorage.getItem("printData"); } catch(e) {}
-      if (!raw) { document.getElementById("preparing").textContent = "No print data found. Please go back and try again."; return; }
+      if (!raw) { document.getElementById("preparing").textContent = "No print data. Please go back and try again."; return; }
 
       let data;
       try { data = JSON.parse(raw); } catch(e) { document.getElementById("preparing").textContent = "Error reading print data."; return; }
 
-      // Don't remove from localStorage — orientation change reloads this page and needs it
       const { months, providers, logoDataUrl } = data;
       const content = document.getElementById("content");
       content.innerHTML = "";
@@ -68,9 +66,9 @@
         const header = document.createElement("div");
         header.className = "header";
         const logoHtml = logoDataUrl
-          ? `<img src="${logoDataUrl}" style="height:30px;object-fit:contain;"/>`
+          ? `<img src="${logoDataUrl}" style="height:34px;object-fit:contain;"/>`
           : `<span class="logo-text">Beaches OBGYN</span>`;
-        header.innerHTML = `<div class="header-left">${logoHtml}</div><div style="text-align:right"><div class="month-title">${MONTHS[month]} ${year}</div><div class="month-sub">Call Schedule</div></div>`;
+        header.innerHTML = `<div>${logoHtml}</div><div style="text-align:right"><div class="month-title">${MONTHS[month]} ${year}</div><div class="month-sub">Call Schedule</div></div>`;
         page.appendChild(header);
 
         // Weekday headers
@@ -100,8 +98,8 @@
           const isWeekend = dow === 0 || dow === 6;
 
           cell.className = "cell";
-          cell.style.border = `1px solid ${prov ? prov.color+"55" : "#e8e8e8"}`;
-          cell.style.borderTop = `3px solid ${prov ? prov.color : "#e8e8e8"}`;
+          cell.style.border = `1px solid ${prov ? prov.color+"55" : "#ebebeb"}`;
+          cell.style.borderTop = `3px solid ${prov ? prov.color : "#e0e0e0"}`;
           cell.style.background = isWeekend ? "#fdf8f8" : "#fff";
 
           const dayNum = document.createElement("div");
@@ -116,9 +114,7 @@
               img.className = "avatar";
               img.src = prov.avatar_url;
               img.style.border = `2px solid ${prov.color}`;
-              img.onerror = () => {
-                img.replaceWith(makeInitialDiv(prov));
-              };
+              img.onerror = () => img.replaceWith(makeInitialDiv(prov));
               cell.appendChild(img);
             } else {
               cell.appendChild(makeInitialDiv(prov));
@@ -157,18 +153,9 @@
       const images = content.querySelectorAll("img");
       let loaded = 0;
       const total = images.length;
-      const tryPrint = () => {
-        loaded++;
-        if (loaded >= total) doPrint();
-      };
-      if (total === 0) {
-        doPrint();
-      } else {
-        images.forEach(img => {
-          if (img.complete) { tryPrint(); }
-          else { img.onload = tryPrint; img.onerror = tryPrint; }
-        });
-      }
+      const tryPrint = () => { loaded++; if (loaded >= total) doPrint(); };
+      if (total === 0) { doPrint(); }
+      else { images.forEach(img => { if (img.complete) tryPrint(); else { img.onload = tryPrint; img.onerror = tryPrint; } }); }
     }
 
     function makeInitialDiv(prov) {
@@ -182,17 +169,10 @@
     function doPrint() {
       setTimeout(() => {
         window.print();
-        // Clean up localStorage after print dialog closes
-        window.addEventListener("afterprint", () => {
-          localStorage.removeItem("printData");
-          window.location.href = "/";
-        }, { once: true });
-        // iOS fallback
-        setTimeout(() => {
-          localStorage.removeItem("printData");
-          window.location.href = "/";
-        }, 30000);
-      }, 500);
+        const cleanup = () => { localStorage.removeItem("printData"); window.location.href = "/"; };
+        window.addEventListener("afterprint", cleanup, { once: true });
+        setTimeout(cleanup, 30000);
+      }, 600);
     }
 
     render();
