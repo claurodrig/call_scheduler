@@ -18,8 +18,6 @@ import {
   UpcomingVacationsPage,
   CallLogicPage,
   PrintSchedulePage,
-  PrintRenderer,
-  PrintCalendarView,
 } from "./components";
 
 const NAV = [
@@ -253,34 +251,5 @@ function AppInner() {
 }
 
 export default function App() {
-  const [printPayload, setPrintPayload] = useState(null);
-  const isPrintRoute = new URLSearchParams(window.location.search).get("print") === "1";
-
-  useEffect(() => {
-    const handler = (e) => setPrintPayload(e.detail);
-    window.addEventListener("beaches-print", handler);
-    return () => window.removeEventListener("beaches-print", handler);
-  }, []);
-
-  useEffect(() => {
-    if (!printPayload) return;
-    const t = setTimeout(() => {
-      window.print();
-      const done = () => setPrintPayload(null);
-      window.addEventListener("afterprint", done, { once: true });
-      setTimeout(done, 30000);
-    }, 1500);
-    return () => clearTimeout(t);
-  }, [printPayload]);
-
-  if (printPayload) {
-    return <PrintCalendarView
-      months={printPayload.months}
-      logoDataUrl={printPayload.logoDataUrl}
-      providers={printPayload.providers}
-    />;
-  }
-
-  if (isPrintRoute) return <PrintRenderer />;
   return <AppInner />;
 }
