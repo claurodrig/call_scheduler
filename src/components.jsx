@@ -1062,7 +1062,6 @@ export function PrintSchedulePage({ onBack }) {
       for (let d = 1; d <= days; d++) cells.push(d);
       while (cells.length % 7 !== 0) cells.push(null);
       const numRows = Math.ceil(cells.length / 7);
-      const rowH = Math.floor((816 - 20 - 16 - 50 - 28 - 30) / numRows);
 
       const cellsHtml = cells.map((d) => {
         if (!d) return `<div style="background:#fafafa;border-radius:4px;"></div>`;
@@ -1085,10 +1084,10 @@ export function PrintSchedulePage({ onBack }) {
         ? `<img src="${logoDataUrl}" style="height:32px;object-fit:contain;"/>`
         : `<span style="font-weight:900;font-size:15px;color:#1a8c78;">Beaches OBGYN</span>`;
 
-      return `<div style="width:1056px;height:816px;padding:20px 24px 16px;box-sizing:border-box;background:#fff;font-family:-apple-system,Helvetica,sans-serif;page-break-after:always;display:flex;flex-direction:column;overflow:hidden;">
+      return `<div style="width:100%;box-sizing:border-box;background:#fff;font-family:-apple-system,Helvetica,sans-serif;page-break-after:always;display:flex;flex-direction:column;padding:12px 14px;min-height:100vh;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;border-bottom:2px solid #1a8c78;padding-bottom:6px;flex-shrink:0;">${logoHtml}<div style="text-align:right;"><div style="font-size:17px;font-weight:900;color:#1a3a35;">${monthName} ${year}</div><div style="font-size:8px;color:#888;">Call Schedule</div></div></div>
         <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:2px;flex-shrink:0;">${["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map((d,i)=>`<div style="text-align:center;padding:2px 0;font-size:8px;font-weight:900;color:${i===0||i===6?"#e05c5c":"#1a8c78"};background:#f0faf8;border-radius:3px;">${d}</div>`).join("")}</div>
-        <div style="display:grid;grid-template-columns:repeat(7,1fr);grid-template-rows:repeat(${numRows},${rowH}px);gap:2px;flex:1;overflow:hidden;">${cellsHtml}</div>
+        <div style="display:grid;grid-template-columns:repeat(7,1fr);grid-template-rows:repeat(${numRows},1fr);gap:2px;flex:1;">${cellsHtml}</div>
         <div style="margin-top:4px;padding-top:4px;border-top:1px solid #e8e8e8;display:flex;flex-wrap:wrap;gap:2px 10px;flex-shrink:0;">${legendHtml}</div>
       </div>`;
     }).join("");
@@ -1107,7 +1106,7 @@ export function PrintSchedulePage({ onBack }) {
     // Inject print styles
     const style = document.createElement("style");
     style.id = "print-hide-app";
-    style.textContent = `@media print { #root { display:none !important; } #print-root { display:block !important; } @page { size:11in 8.5in landscape; margin:0; } }`;
+    style.textContent = `@media print { #root { display:none !important; } #print-root { display:block !important; } @page { margin:0; } * { -webkit-print-color-adjust:exact; print-color-adjust:exact; } }`;
     document.head.appendChild(style);
 
     setTimeout(() => {
