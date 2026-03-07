@@ -1007,6 +1007,7 @@ export function PrintSchedulePage({ onBack }) {
   const [providers, setProviders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [logoDataUrl, setLogoDataUrl] = useState(null);
+  const [printData, setPrintData] = useState(null);
 
   const monthOptions = [];
   for (let i = -6; i <= 12; i++) {
@@ -1110,20 +1111,46 @@ export function PrintSchedulePage({ onBack }) {
       return;
     }
 
-    // iOS: store only schedule data + provider info (NO base64 avatars — too large for sessionStorage)
-    // PrintCalendarView will re-fetch avatars as regular <img> tags using avatar_url directly
-    const payload = JSON.stringify({
+    // iOS: use history.pushState to change URL without page reload
+    // This keeps all data in memory — no storage needed, no page reload on orientation change
+    const payload = {
       months: months.map(m => ({ ...m, scheduleData: m.scheduleData })),
       providers: providers.map(p => ({ id: p.id, name: p.name, color: p.color, initials: p.initials, avatar_url: p.avatar_url })),
       logoDataUrl,
-    });
-    console.log("[Print] payload size:", payload.length);
-    let stored = false;
-    try { sessionStorage.setItem("printData", payload); stored = true; } catch(e) { console.log("[Print] sessionStorage failed:", e); }
-    if (!stored) try { localStorage.setItem("printData", payload); stored = true; } catch(e) { console.log("[Print] localStorage failed:", e); }
-    console.log("[Print] stored:", stored, "navigating to /?print=1");
-    window.location.href = "/?print=1";
+    };
+    window.__printPayload = payload;
+    history.pushState({ print: true }, "", "/?print=1");
+    // Trigger App to re-read the URL and render PrintRenderer
+    window.dispatchEvent(new PopStateEvent("popstate", { state: { print: true } }));
+    setPrintData(payload);
   };
+
+  // When printData is set, trigger print after React has painted the overlay
+  useEffect(() => {
+    if (!printData) return;
+    const t = setTimeout(() => {
+      window.print();
+      // After print, restore URL and clear overlay
+      const onAfter = () => {
+        history.pushState({}, "", "/");
+        setPrintData(null);
+      };
+      window.addEventListener("afterprint", onAfter, { once: true });
+      // iOS fallback — afterprint may not fire
+      setTimeout(onAfter, 30000);
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [printData]);
+
+  // Render print overlay — stays in same page context so iOS orientation change works
+  if (printData) {
+    return <PrintCalendarView
+      months={printData.months}
+      avatarMap={{}}
+      logoDataUrl={printData.logoDataUrl}
+      providers={printData.providers}
+    />;
+  }
 
   return (
     <div style={{paddingBottom:20}}>
@@ -2817,11 +2844,16 @@ export function PrintRenderer() {
   let printData = null;
   try {
     const raw = sessionStorage.getItem("printData") || localStorage.getItem("printData");
-    console.log("[PrintRenderer] raw data length:", raw ? raw.length : "null");
+    const ssRaw = sessionStorage.getItem("printData");
+    const lsRaw = localStorage.getItem("printData");
+    console.log("[PrintRenderer] sessionStorage:", ssRaw ? ssRaw.length : "null");
+    console.log("[PrintRenderer] localStorage:", lsRaw ? lsRaw.length : "null");
+    console.log("[PrintRenderer] url:", window.location.href);
     if (raw) printData = JSON.parse(raw);
-    // NOTE: do NOT remove printData here — iOS reloads the page on orientation change
-    // and needs to re-read it. PrintCalendarView clears it after print.
-  } catch(e) { console.log("[PrintRenderer] parse error:", e); }
+    // Do NOT remove — iOS reloads page on orientation change and needs to re-read
+  } catch(e) { console.log("[PrintRenderer] error:", e); }
+
+  console.log("[PrintRenderer] printData:", printData ? "FOUND" : "NULL - will redirect to /");
 
   // If no data, redirect immediately
   if (!printData) {
@@ -2843,27 +2875,6 @@ export function PrintRenderer() {
 }
 
 function PrintCalendarView({ months, avatarMap, logoDataUrl, providers }) {
-  useEffect(() => {
-    const goHome = () => {
-      sessionStorage.removeItem("printData");
-      localStorage.removeItem("printData");
-      window.location.href = "/";
-    };
-
-    // afterprint fires when dialog closes (desktop). iOS doesn't support it, so use fallback.
-    window.addEventListener("afterprint", goHome);
-    // Fallback: 30s is plenty of time to pick orientation and confirm print
-    const fallback = setTimeout(goHome, 30000);
-
-    const t = setTimeout(() => { window.print(); }, 1500);
-
-    return () => {
-      clearTimeout(t);
-      clearTimeout(fallback);
-      window.removeEventListener("afterprint", goHome);
-    };
-  }, []);
-
   return (
     <div style={{background:"#fff", fontFamily:"-apple-system,Helvetica,sans-serif"}}>
       <style>{`*{margin:0;padding:0;box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact;}@page{margin:0.2in;}`}</style>
