@@ -1119,18 +1119,17 @@ export function PrintSchedulePage({ onBack }) {
 
     const fullHtml = `<style>*{margin:0;padding:0;box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact;font-family:-apple-system,Helvetica,sans-serif;}body{background:#fff;}@page{margin:0.2in;}</style>${pagesHtml}`;
 
-    // Desktop: open new tab
-    const isIOSPWA = window.navigator.standalone === true;
-    if (!isIOSPWA) {
+    const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+
+    if (!isIOS) {
+      // Desktop/Android: open new tab
       const w = window.open("", "_blank");
-      if (w) { w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>${fullHtml}</body></html>`); w.document.close(); setTimeout(() => w.print(), 800); }
-      return;
+      if (w) { w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>${fullHtml}</body></html>`); w.document.close(); setTimeout(() => w.print(), 800); return; }
     }
 
-    // iOS PWA: body swap with generous delay so repaint completes
+    // iOS: body swap with delay for repaint
     const saved = document.body.innerHTML;
     document.body.innerHTML = fullHtml;
-    // Wait 1.5s for iOS to fully repaint before print dialog
     setTimeout(() => {
       window.print();
       setTimeout(() => {
