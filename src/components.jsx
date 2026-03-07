@@ -378,7 +378,7 @@ export function ProvidersPage({ onMessage, currentProvider }) {
   const [messages, setMessages]     = useState({});
   const [loadingId, setLoadingId]   = useState(null);
 
-  useEffect(() => { fetchProviders().then(setProviders); }, []);
+  useEffect(() => { fetchProviders().then(all => setProviders(all.filter(p => !p.is_read_only))); }, []);
 
   const handleOpen = async (p) => {
     const newOpen = open === p.id ? null : p.id;
@@ -1659,7 +1659,8 @@ function AIScheduleGenerator() {
     setError(null);
     setSummary(null);
     try {
-      const [providers, requests] = await Promise.all([fetchProviders(), fetchRequests()]);
+      const [allProviders, requests] = await Promise.all([fetchProviders(), fetchRequests()]);
+      const providers = allProviders.filter(p => !p.is_read_only);
       const monthsToGenerate = bulk ? generatableMonths : [{ year, month }];
       const summaries = [];
 
@@ -1695,10 +1696,10 @@ function AIScheduleGenerator() {
 
       setSummary(summaries.join("\n\n"));
 
-      // Notify all providers that a new schedule was published
+      // Notify ALL providers (including view-only) that a new schedule was published
       const monthNames = monthsToGenerate.map(({ year: y, month: m }) => `${MONTHS[m]} ${y}`).join(", ");
       sendPushNotification({
-        providerIds: providers.map(p => p.id),
+        providerIds: allProviders.map(p => p.id),
         title: "Schedule Published 📅",
         body: `The call schedule for ${monthNames} is now available`,
         data: { action: "home" },
@@ -2438,7 +2439,7 @@ export function AdminPage({ onBack }) {
     const req = reqs.find(r => r.id === id);
     if (!req) return;
 
-    const allProviders = await fetchProviders();
+    const allProviders = (await fetchProviders()).filter(p => !p.is_read_only);
     const start = new Date(req.start_date + "T00:00:00");
     const end   = new Date(req.end_date   + "T00:00:00");
 
