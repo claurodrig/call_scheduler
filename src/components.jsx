@@ -1043,14 +1043,28 @@ export function PrintSchedulePage({ onBack }) {
     return [parseInt(hex.slice(1,3),16), parseInt(hex.slice(3,5),16), parseInt(hex.slice(5,7),16)];
   };
 
-  const toBase64 = (url) => new Promise((resolve) => {
+  const toBase64 = (url, color) => new Promise((resolve) => {
     const img = new Image();
     img.crossOrigin = "anonymous";
     img.onload = () => {
       try {
+        const size = 128;
         const canvas = document.createElement("canvas");
-        canvas.width = img.width; canvas.height = img.height;
-        canvas.getContext("2d").drawImage(img, 0, 0);
+        canvas.width = size; canvas.height = size;
+        const ctx = canvas.getContext("2d");
+        // Clip to circle
+        ctx.beginPath();
+        ctx.arc(size/2, size/2, size/2 - 3, 0, Math.PI * 2);
+        ctx.closePath();
+        ctx.clip();
+        ctx.drawImage(img, 0, 0, size, size);
+        // Draw colored ring on top
+        ctx.restore && ctx.restore();
+        ctx.beginPath();
+        ctx.arc(size/2, size/2, size/2 - 2, 0, Math.PI * 2);
+        ctx.strokeStyle = color || "#1a8c78";
+        ctx.lineWidth = 5;
+        ctx.stroke();
         resolve(canvas.toDataURL("image/png"));
       } catch { resolve(null); }
     };
@@ -1075,7 +1089,7 @@ export function PrintSchedulePage({ onBack }) {
       // Fetch avatars as base64
       const avatarMap = {};
       await Promise.all(providers.filter(p => p.avatar_url).map(async p => {
-        avatarMap[p.id] = await toBase64(p.avatar_url);
+        avatarMap[p.id] = await toBase64(p.avatar_url, p.color);
       }));
 
       // Landscape letter: 11 x 8.5 inches at 72pt/in = 792 x 612
@@ -1208,17 +1222,7 @@ export function PrintSchedulePage({ onBack }) {
             const acy = ay + cr; // circle center y
 
             if (b64) {
-              // Draw circular clip: fill white circle first, then image clipped by redrawing circle as stroke
-              // jsPDF doesn't support true clip paths for images, so we draw a filled circle bg,
-              // then overdraw the image, then redraw the circle border to mask edges
-              const [ar,ag,ab] = hexToRgb(prov.color);
-              // White circle background
-              pdf.setFillColor(255,255,255);
-              pdf.circle(acx, acy, cr, "F");
               try { pdf.addImage(b64, "PNG", ax, ay, avatarSize, avatarSize, "", "FAST"); } catch {}
-              // Colored border ring to make it look circular
-              pdf.setDrawColor(ar,ag,ab); pdf.setLineWidth(1.2);
-              pdf.circle(acx, acy, cr, "S");
             } else {
               const [ar,ag,ab] = hexToRgb(prov.color);
               pdf.setFillColor(ar,ag,ab);
