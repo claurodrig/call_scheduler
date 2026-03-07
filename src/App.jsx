@@ -258,7 +258,7 @@ function AppInner() {
         {renderBody()}
       </div>
       <nav style={{display:"flex", borderTop:`1px solid ${C.grey}`, background:"#fff", position:"sticky", bottom:0, zIndex:10, flexShrink:0}}>
-        {NAV.map(([key, label, Icon]) => {
+        {NAV.filter(([key]) => !(currentProvider?.is_read_only && key === "request")).map(([key, label, Icon]) => {
           const active = tab === key && !sub;
           return (
             <button key={key} onClick={() => { setTab(key); setSub(null); }}

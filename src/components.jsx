@@ -493,10 +493,12 @@ export function ProvidersPage({ onMessage, currentProvider }) {
 
                   {/* Message + Call buttons */}
                   <div style={{display:"flex", gap:8}}>
-                    <button style={btnS({flex:1, padding:"9px", fontSize:13})}
-                      onClick={()=>onMessage(p)}>
-                      Message {p.name.replace("Dr. ","")}
-                    </button>
+                    {!currentProvider?.is_read_only && (
+                      <button style={btnS({flex:1, padding:"9px", fontSize:13})}
+                        onClick={()=>onMessage(p)}>
+                        Message {p.name.replace("Dr. ","")}
+                      </button>
+                    )}
                     {p.phone && (
                       <a href={`tel:${p.phone.replace(/\D/g,"")}`} style={{
                         flex:1, padding:"9px", fontSize:13, fontFamily:ff, fontWeight:800,
@@ -1423,17 +1425,29 @@ export function PrintSchedulePage({ onBack }) {
 
 export function MorePage({ onNav, currentProvider }) {
   const isAdmin = currentProvider?.is_admin;
+  const isReadOnly = currentProvider?.is_read_only;
   const items = [
     ...(isAdmin ? [[IcoLock,"Admin Panel","admin"]] : []),
     [IcoClipboard,"Call Logic","logic"],
     [IcoPalm,"Upcoming Vacations","vacations"],
     [IcoScale,"Call Fairness","fairness"],
-    [IcoPrint,"Print Schedule","print"],
+    [IcoPrint,"Export Schedule PDF","print"],
     [IcoGear,"Settings","settings"],
-  ];
+  ].filter(([,,key]) => {
+    if (isReadOnly && key === "admin") return false;
+    return true;
+  });
   return (
     <div style={{paddingBottom:20}}>
-      <p style={{fontFamily:ff, fontWeight:900, fontSize:16, color:C.text, marginBottom:12}}>More</p>
+      <div style={{display:"flex", alignItems:"center", gap:10, marginBottom:12}}>
+        <p style={{fontFamily:ff, fontWeight:900, fontSize:16, color:C.text, margin:0, flex:1}}>More</p>
+        {isReadOnly && (
+          <span style={{fontFamily:ff, fontWeight:800, fontSize:10, color:"#0369a1",
+            background:"#e0f2fe", border:"1px solid #7dd3fc", borderRadius:6, padding:"3px 8px"}}>
+            VIEW ONLY
+          </span>
+        )}
+      </div>
       {items.map(([Icon,label,key]) => (
         <div key={key} onClick={()=>onNav(key)} style={card({padding:"13px 16px", marginBottom:10, display:"flex", alignItems:"center", gap:14, cursor:"pointer"})}>
           <div style={{width:36, height:36, borderRadius:8, background:C.wave, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0}}>
@@ -2378,6 +2392,27 @@ export function AdminPage({ onBack }) {
     setUserLoading(false);
   };
 
+  const handleReadOnlyToggle = async (provider) => {
+    // If turning OFF read-only, warn that this adds them to call rotation
+    if (provider.is_read_only) {
+      const confirmed = window.confirm(
+        `⚠️ Warning: Removing View Only from ${provider.name} will add them to the call rotation and allow them to submit requests and send messages.\n\nAre you sure you want to do this?`
+      );
+      if (!confirmed) return;
+    }
+    setUserLoading(true);
+    const { error } = await supabase
+      .from("providers")
+      .update({ is_read_only: !provider.is_read_only })
+      .eq("id", provider.id);
+    if (!error) {
+      fetchProviders().then(setProviders);
+    } else {
+      setUserMsg({ text: "Failed to update view-only status", ok: false });
+    }
+    setUserLoading(false);
+  };
+
   const [conflictModal, setConflictModal] = useState(null);
   // conflictModal: { requestId, conflicts: [{ date, currentEmail, currentProv, suggestions: [provider] }], selections: { date: email }, blocked: [date] }
 
@@ -2774,6 +2809,7 @@ export function AdminPage({ onBack }) {
                 <div style={{display:"flex", alignItems:"center", gap:6}}>
                   <p style={{margin:0, fontFamily:ff, fontWeight:800, fontSize:13, color:C.text}}>{p.name}</p>
                   {p.is_admin && <span style={{fontFamily:ff, fontWeight:700, fontSize:9, color:"#fff", background:C.teal, borderRadius:4, padding:"2px 5px"}}>ADMIN</span>}
+                  {p.is_read_only && <span style={{fontFamily:ff, fontWeight:700, fontSize:9, color:"#0369a1", background:"#e0f2fe", borderRadius:4, padding:"2px 5px"}}>VIEW ONLY</span>}
                 </div>
                 <p style={{margin:"2px 0 0", fontFamily:ffb, fontSize:11, color:C.sub}}>{p.email}</p>
               </div>
@@ -2823,6 +2859,15 @@ export function AdminPage({ onBack }) {
                   <p style={{margin:"2px 0 0", fontFamily:ffb, fontSize:11, color:C.sub}}>Can manage schedules & users</p>
                 </div>
                 <Toggle val={!!p.is_admin} fn={() => handleRoleToggle(p)}/>
+              </div>
+
+              {/* Toggle read-only */}
+              <div style={{borderTop:`1px solid ${C.grey}`, paddingTop:12, display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12}}>
+                <div>
+                  <p style={{margin:0, fontFamily:ff, fontWeight:700, fontSize:12, color:C.text}}>View Only</p>
+                  <p style={{margin:"2px 0 0", fontFamily:ffb, fontSize:11, color:C.sub}}>Can view & export — no requests or messages</p>
+                </div>
+                <Toggle val={!!p.is_read_only} fn={() => handleReadOnlyToggle(p)}/>
               </div>
 
               {/* Delete user */}
