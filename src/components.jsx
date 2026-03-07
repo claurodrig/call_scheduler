@@ -2321,6 +2321,7 @@ export function AdminPage({ onBack }) {
   const [tempPassword, setTempPassword] = useState("");
   const [userMsg, setUserMsg]           = useState(null); // { text, ok }
   const [userLoading, setUserLoading]   = useState(false);
+  const [conflictModal, setConflictModal] = useState(null);
 
   useEffect(() => {
     fetchRequests().then(setReqs);
@@ -2413,9 +2414,6 @@ export function AdminPage({ onBack }) {
     }
     setUserLoading(false);
   };
-
-  const [conflictModal, setConflictModal] = useState(null);
-  // conflictModal: { requestId, conflicts: [{ date, currentEmail, currentProv, suggestions: [provider] }], selections: { date: email }, blocked: [date] }
 
   const handleStatus = async (id, status) => {
     if (status !== "Approved") {
