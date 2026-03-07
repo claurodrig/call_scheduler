@@ -236,20 +236,18 @@ function AppInner() {
       <div style={{flex:1, padding:"16px 16px 0", overflowY:"auto"}}>
         {renderBody()}
       </div>
-      {!sub && (
-        <nav style={{display:"flex", borderTop:`1px solid ${C.grey}`, background:"#fff", position:"sticky", bottom:0, zIndex:10}}>
-          {NAV.map(([key, label, Icon]) => {
-            const active = tab === key;
-            return (
-              <button key={key} onClick={() => { setTab(key); setSub(null); }}
-                style={{flex:1, border:"none", background:"none", padding:"10px 0 8px", display:"flex", flexDirection:"column", alignItems:"center", gap:3, cursor:"pointer"}}>
-                <Icon color={active ? C.teal : C.sub}/>
-                <span style={{fontFamily:ffb, fontSize:10, color: active ? C.teal : C.sub, fontWeight: active ? 800 : 500}}>{label}</span>
-              </button>
-            );
-          })}
-        </nav>
-      )}
+      <nav style={{display:"flex", borderTop:`1px solid ${C.grey}`, background:"#fff", position:"sticky", bottom:0, zIndex:10, flexShrink:0}}>
+        {NAV.map(([key, label, Icon]) => {
+          const active = tab === key && !sub;
+          return (
+            <button key={key} onClick={() => { setTab(key); setSub(null); }}
+              style={{flex:1, border:"none", background:"none", padding:"10px 0 8px", display:"flex", flexDirection:"column", alignItems:"center", gap:3, cursor:"pointer"}}>
+              <Icon color={active ? C.teal : C.sub}/>
+              <span style={{fontFamily:ffb, fontSize:10, color: active ? C.teal : C.sub, fontWeight: active ? 800 : 500}}>{label}</span>
+            </button>
+          );
+        })}
+      </nav>
     </div>
   );
 }
