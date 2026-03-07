@@ -1833,8 +1833,9 @@ function ScheduleEditor({ providers }) {
   const [schedule, setSchedule] = useState({});
   const [loading, setLoading]   = useState(true);
   const [selected, setSelected] = useState(null); // { dateKey, d, current }
-  const [saving, setSaving]     = useState(false);
-  const [savedFlash, setSavedFlash] = useState(null); // dateKey that just saved
+  const [saving, setSaving]         = useState(false);
+  const [savedFlash, setSavedFlash]   = useState(null);
+  const [approvedRequests, setApprovedRequests] = useState([]);
 
   const prevMo = () => mo === 0 ? (setMo(11), setYr(y => y-1)) : setMo(m => m-1);
   const nextMo = () => mo === 11 ? (setMo(0), setYr(y => y+1)) : setMo(m => m+1);
@@ -1843,6 +1844,21 @@ function ScheduleEditor({ providers }) {
     setLoading(true);
     fetchSchedule(yr, mo).then(data => { setSchedule(data); setLoading(false); });
   }, [yr, mo]);
+
+  useEffect(() => {
+    fetchRequests().then(reqs => {
+      setApprovedRequests(reqs.filter(r => r.status === "Approved" && r.start_date && r.end_date));
+    });
+  }, []);
+
+  // Returns true if provider has approved time off on the given dateKey
+  const isOnVacation = (provider, dateKey) => {
+    return approvedRequests.some(r =>
+      r.provider_id === provider.id &&
+      dateKey >= r.start_date &&
+      dateKey <= r.end_date
+    );
+  };
 
   const days  = getDays(yr, mo);
   const first = getFirst(yr, mo);
@@ -1861,6 +1877,13 @@ function ScheduleEditor({ providers }) {
 
   const handleAssign = async (provider) => {
     if (!selected) return;
+
+    // Warn if provider is on approved time off that day
+    if (isOnVacation(provider, selected.dateKey)) {
+      const ok = window.confirm(`⚠️ ${provider.name} has approved time off on this date. Assign them anyway?`);
+      if (!ok) return;
+    }
+
     setSaving(true);
     const { dateKey } = selected;
 
@@ -1935,18 +1958,21 @@ function ScheduleEditor({ providers }) {
             <div style={{display:"flex", flexDirection:"column", gap:8, marginBottom:12}}>
               {providers.map(p => {
                 const isCurrent = selected.current?.id === p.id;
+                const onVacay = isOnVacation(p, selected.dateKey);
                 return (
                   <div key={p.id} onClick={() => !saving && handleAssign(p)} style={{
                     display:"flex", alignItems:"center", gap:12, padding:"10px 14px",
                     borderRadius:10, cursor:"pointer",
-                    border:`2px solid ${isCurrent ? p.color : C.grey}`,
-                    background: isCurrent ? `${p.color}15` : "#fff",
+                    border:`2px solid ${onVacay ? "#f59e0b" : isCurrent ? p.color : C.grey}`,
+                    background: onVacay ? "#fffbeb" : isCurrent ? `${p.color}15` : "#fff",
                     opacity: saving ? 0.6 : 1,
                   }}>
                     <Avatar p={p} size={36} ring/>
                     <div style={{flex:1}}>
                       <p style={{margin:0, fontFamily:ff, fontWeight:800, fontSize:13, color:C.text}}>{p.name}</p>
-                      <p style={{margin:"2px 0 0", fontFamily:ffb, fontSize:11, color:C.sub}}>{p.credentials}</p>
+                      <p style={{margin:"2px 0 0", fontFamily:ffb, fontSize:11, color: onVacay ? "#b45309" : C.sub}}>
+                        {onVacay ? "⚠️ On approved time off" : p.credentials}
+                      </p>
                     </div>
                     {isCurrent && <span style={{color:p.color, fontWeight:900, fontSize:14}}>✓</span>}
                   </div>
