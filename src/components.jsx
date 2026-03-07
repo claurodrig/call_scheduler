@@ -175,14 +175,27 @@ export function Header({ onNotif, onSettings, logoSrc, unreadCount=0 }) {
 
 export function NextStrip({ schedule={}, year, month }) {
   const now = new Date();
-  const isCurrentMonth = year === now.getFullYear() && month === now.getMonth();
-  const base = isCurrentMonth ? now : new Date(year, month, 1);
+  const [todaySchedule, setTodaySchedule] = useState({});
+
+  useEffect(() => {
+    // Always fetch current real month so the strip is accurate regardless of calendar view
+    fetchSchedule(now.getFullYear(), now.getMonth()).then(setTodaySchedule);
+  }, []);
+
+  // Also fetch next month in case the 5-day window crosses a month boundary
+  const [nextMonthSchedule, setNextMonthSchedule] = useState({});
+  useEffect(() => {
+    const nm = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    fetchSchedule(nm.getFullYear(), nm.getMonth()).then(setNextMonthSchedule);
+  }, []);
+
+  const combined = { ...nextMonthSchedule, ...todaySchedule };
 
   const days = Array.from({length:5}, (_,i) => {
-    const d = new Date(base);
-    d.setDate(base.getDate() + i);
+    const d = new Date(now);
+    d.setDate(now.getDate() + i);
     const k = dkey(d.getFullYear(), d.getMonth(), d.getDate());
-    return { d, p: schedule[k] };
+    return { d, p: combined[k] ?? null };
   });
 
   return (
