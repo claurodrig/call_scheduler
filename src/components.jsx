@@ -1006,7 +1006,6 @@ export function PrintSchedulePage({ onBack }) {
   ]);
   const [providers, setProviders] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [printContent, setPrintContent] = useState(null); // HTML string when ready to print
   const [logoDataUrl, setLogoDataUrl] = useState(null);
 
   const monthOptions = [];
@@ -1039,35 +1038,6 @@ export function PrintSchedulePage({ onBack }) {
 
   useEffect(() => { fetchProviders().then(setProviders); }, []);
 
-  // When printContent is set, inject print styles, print, then clean up
-  useEffect(() => {
-    if (!printContent) return;
-
-    // Inject print styles that hide everything except our overlay
-    const style = document.createElement("style");
-    style.id = "beaches-print-style";
-    style.textContent = `
-      @media print {
-        body > * { display: none !important; }
-        #beaches-print-overlay { display: block !important; position: static !important; }
-        #beaches-print-overlay > .print-ui { display: none !important; }
-        #beaches-print-overlay > .print-pages { display: block !important; }
-        @page { margin: 0.2in; }
-      }
-    `;
-    document.head.appendChild(style);
-
-    setTimeout(() => {
-      window.print();
-      setTimeout(() => {
-        document.getElementById("beaches-print-style")?.remove();
-        setPrintContent(null);
-      }, 500);
-    }, 400);
-
-    return () => { document.getElementById("beaches-print-style")?.remove(); };
-  }, [printContent]);
-
   const handlePrint = async () => {
     if (selectedMonths.length === 0) return;
     setLoading(true);
@@ -1080,7 +1050,6 @@ export function PrintSchedulePage({ onBack }) {
     const merged = {};
     results.forEach(({ year, month, data }) => { merged[`${year}-${month}`] = data; });
 
-    // Preload avatars as base64
     const toBase64 = (url) => new Promise((resolve) => {
       const img = new Image();
       img.crossOrigin = "anonymous";
@@ -1148,20 +1117,28 @@ export function PrintSchedulePage({ onBack }) {
       </div>`;
     }).join("");
 
-    setPrintContent(pagesHtml);
-  };
+    const fullHtml = `<style>*{margin:0;padding:0;box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact;font-family:-apple-system,Helvetica,sans-serif;}body{background:#fff;}@page{margin:0.2in;}</style>${pagesHtml}`;
 
-  // Fullscreen print overlay — visible only during printing via @media print
-  if (printContent) {
-    return (
-      <div id="beaches-print-overlay" style={{position:"fixed", inset:0, zIndex:9999, background:"#fff"}}>
-        <div className="print-ui" style={{display:"flex", alignItems:"center", justifyContent:"center", height:"100vh"}}>
-          <p style={{fontFamily:ff, fontSize:14, color:C.sub}}>Opening print dialog…</p>
-        </div>
-        <div className="print-pages" style={{display:"none"}} dangerouslySetInnerHTML={{__html: printContent}}/>
-      </div>
-    );
-  }
+    // Desktop: open new tab
+    const isIOSPWA = window.navigator.standalone === true;
+    if (!isIOSPWA) {
+      const w = window.open("", "_blank");
+      if (w) { w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>${fullHtml}</body></html>`); w.document.close(); setTimeout(() => w.print(), 800); }
+      return;
+    }
+
+    // iOS PWA: body swap with generous delay so repaint completes
+    const saved = document.body.innerHTML;
+    document.body.innerHTML = fullHtml;
+    // Wait 1.5s for iOS to fully repaint before print dialog
+    setTimeout(() => {
+      window.print();
+      setTimeout(() => {
+        document.body.innerHTML = saved;
+        window.location.reload();
+      }, 1000);
+    }, 1500);
+  };
 
   return (
     <div style={{paddingBottom:20}}>
