@@ -235,6 +235,7 @@ function VacationStrip() {
       const today = new Date(); today.setHours(0,0,0,0);
       const active = all.filter(r => {
         if (r.status !== "Approved") return false;
+        if (r.type !== "Days Off") return false;
         const s = new Date(r.start_date + "T00:00:00");
         const e = new Date(r.end_date + "T00:00:00");
         return s <= today && e >= today;
@@ -2071,13 +2072,14 @@ function ScheduleEditor({ providers }) {
     setLockSaving(false);
   };
 
-  // Returns true if provider has approved time off on the given dateKey
+  // Returns the request type if provider has approved time off on the given dateKey, or null
   const isOnVacation = (provider, dateKey) => {
-    return approvedRequests.some(r =>
+    const r = approvedRequests.find(r =>
       r.provider_id === provider.id &&
       dateKey >= r.start_date &&
       dateKey <= r.end_date
     );
+    return r ? r.type : null;
   };
 
   const days  = getDays(yr, mo);
@@ -2098,9 +2100,13 @@ function ScheduleEditor({ providers }) {
   const handleAssign = async (provider) => {
     if (!selected) return;
 
-    // Warn if provider is on approved time off that day
-    if (isOnVacation(provider, selected.dateKey)) {
-      const ok = window.confirm(`⚠️ ${provider.name} has approved time off on this date. Assign them anyway?`);
+    // Warn if provider has approved time off that day
+    const timeOffType = isOnVacation(provider, selected.dateKey);
+    if (timeOffType) {
+      const msg = timeOffType === "Days Off"
+        ? `${provider.name} has approved days off on this date.`
+        : `${provider.name} is Off Call Only on this date (clinic only, no call).`;
+      const ok = window.confirm(`⚠️ ${msg} Assign them anyway?`);
       if (!ok) return;
     }
 
@@ -2178,20 +2184,22 @@ function ScheduleEditor({ providers }) {
             <div style={{display:"flex", flexDirection:"column", gap:8, marginBottom:12}}>
               {providers.map(p => {
                 const isCurrent = selected.current?.id === p.id;
-                const onVacay = isOnVacation(p, selected.dateKey);
+                const timeOffType = isOnVacation(p, selected.dateKey);
                 return (
                   <div key={p.id} onClick={() => !saving && handleAssign(p)} style={{
                     display:"flex", alignItems:"center", gap:12, padding:"10px 14px",
                     borderRadius:10, cursor:"pointer",
-                    border:`2px solid ${onVacay ? "#f59e0b" : isCurrent ? p.color : C.grey}`,
-                    background: onVacay ? "#fffbeb" : isCurrent ? `${p.color}15` : "#fff",
+                    border:`2px solid ${timeOffType ? "#f59e0b" : isCurrent ? p.color : C.grey}`,
+                    background: timeOffType ? "#fffbeb" : isCurrent ? `${p.color}15` : "#fff",
                     opacity: saving ? 0.6 : 1,
                   }}>
                     <Avatar p={p} size={36} ring/>
                     <div style={{flex:1}}>
                       <p style={{margin:0, fontFamily:ff, fontWeight:800, fontSize:13, color:C.text}}>{p.name}</p>
-                      <p style={{margin:"2px 0 0", fontFamily:ffb, fontSize:11, color: onVacay ? "#b45309" : C.sub}}>
-                        {onVacay ? "⚠️ On approved time off" : p.credentials}
+                      <p style={{margin:"2px 0 0", fontFamily:ffb, fontSize:11, color: timeOffType ? "#b45309" : C.sub}}>
+                        {timeOffType === "Days Off" ? "⚠️ On approved days off"
+                          : timeOffType === "Off Call Only" ? "⚠️ Off call only (clinic available)"
+                          : p.credentials}
                       </p>
                     </div>
                     {isCurrent && <span style={{color:p.color, fontWeight:900, fontSize:14}}>✓</span>}
@@ -3142,7 +3150,7 @@ export function UpcomingVacationsPage({ onBack }) {
       const today = new Date();
       today.setHours(0,0,0,0);
       const upcoming = all
-        .filter(r => r.status === "Approved" && new Date(r.end_date) >= today)
+        .filter(r => r.status === "Approved" && r.type === "Days Off" && new Date(r.end_date) >= today)
         .sort((a, b) => new Date(a.start_date) - new Date(b.start_date));
       setRequests(upcoming);
       setLoading(false);
