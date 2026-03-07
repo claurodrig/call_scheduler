@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import logoSrc from "./assets/logo.png";
 import { C, ff, ffb, btnS, card, inpS, lblS } from "./data";
 import { supabase } from "./supabase";
@@ -256,7 +256,7 @@ export default function App() {
   }
 
   return (
-    <div style={{minHeight:"100vh", background:C.bg, display:"flex", flexDirection:"column", maxWidth:430, margin:"0 auto", fontFamily:ff}}>
+    <div id="app-root" style={{minHeight:"100vh", background:C.bg, display:"flex", flexDirection:"column", maxWidth:430, margin:"0 auto", fontFamily:ff}}>
       <Header logoSrc={logoSrc} onNotif={handleBell} onSettings={()=>setSub("settings")} unreadCount={unreadCount}/>
       <div style={{flex:1, overflowY:"auto", padding:"14px 14px 80px"}}>
         {renderBody()}

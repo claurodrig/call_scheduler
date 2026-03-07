@@ -1052,10 +1052,23 @@ export function PrintSchedulePage({ onBack }) {
     results.forEach(({ year, month, data }) => { merged[`${year}-${month}`] = data; });
     setLoading(false);
     setPrintData(merged);
-    // Inject print styles, print, then remove
     setTimeout(() => {
+      const style = document.createElement("style");
+      style.id = "print-hide-app";
+      style.textContent = `
+        @media print {
+          #app-root { display: none !important; }
+          #print-root { display: block !important; position: fixed; top: 0; left: 0; width: 100%; }
+          @page { size: 11in 8.5in landscape; margin: 0; }
+        }
+      `;
+      document.head.appendChild(style);
       window.print();
-    }, 300);
+      setTimeout(() => {
+        const s = document.getElementById("print-hide-app");
+        if (s) s.remove();
+      }, 1000);
+    }, 400);
   };
 
   const handleBack = () => {
@@ -1138,19 +1151,9 @@ export function PrintSchedulePage({ onBack }) {
 
   return (
     <div style={{paddingBottom:20}}>
-      {/* Print-only styles */}
-      <style>{`
-        @media print {
-          body > * { display: none !important; }
-          #print-root { display: block !important; }
-          @page { size: 11in 8.5in landscape; margin: 0; }
-        }
-        #print-root { display: none; }
-      `}</style>
-
       {/* Print content rendered in DOM but hidden until print */}
       {printData && (
-        <div id="print-root">
+        <div id="print-root" style={{display:"none"}}>
           {selectedMonths.map(({ year, month }) => renderCalendarPage(year, month))}
         </div>
       )}
