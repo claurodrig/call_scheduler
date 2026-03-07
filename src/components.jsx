@@ -2819,8 +2819,8 @@ export function PrintRenderer() {
     const raw = sessionStorage.getItem("printData") || localStorage.getItem("printData");
     console.log("[PrintRenderer] raw data length:", raw ? raw.length : "null");
     if (raw) printData = JSON.parse(raw);
-    sessionStorage.removeItem("printData");
-    localStorage.removeItem("printData");
+    // NOTE: do NOT remove printData here — iOS reloads the page on orientation change
+    // and needs to re-read it. PrintCalendarView clears it after print.
   } catch(e) { console.log("[PrintRenderer] parse error:", e); }
 
   // If no data, redirect immediately
@@ -2844,7 +2844,11 @@ export function PrintRenderer() {
 
 function PrintCalendarView({ months, avatarMap, logoDataUrl, providers }) {
   useEffect(() => {
-    const goHome = () => { window.location.href = "/"; };
+    const goHome = () => {
+      sessionStorage.removeItem("printData");
+      localStorage.removeItem("printData");
+      window.location.href = "/";
+    };
 
     // afterprint fires when dialog closes (desktop). iOS doesn't support it, so use fallback.
     window.addEventListener("afterprint", goHome);
