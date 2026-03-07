@@ -1110,11 +1110,18 @@ export function PrintSchedulePage({ onBack }) {
       return;
     }
 
-    // iOS: store structured data and navigate to print route
-    // PrintRenderer reads this synchronously on fresh page load — calendar is the FIRST paint
-    const payload = JSON.stringify({ months, avatarMap, logoDataUrl, providers });
-    try { sessionStorage.setItem("printData", payload); } catch(e) {}
-    try { localStorage.setItem("printData", payload); } catch(e) {}
+    // iOS: store only schedule data + provider info (NO base64 avatars — too large for sessionStorage)
+    // PrintCalendarView will re-fetch avatars as regular <img> tags using avatar_url directly
+    const payload = JSON.stringify({
+      months: months.map(m => ({ ...m, scheduleData: m.scheduleData })),
+      providers: providers.map(p => ({ id: p.id, name: p.name, color: p.color, initials: p.initials, avatar_url: p.avatar_url })),
+      logoDataUrl,
+    });
+    console.log("[Print] payload size:", payload.length);
+    let stored = false;
+    try { sessionStorage.setItem("printData", payload); stored = true; } catch(e) { console.log("[Print] sessionStorage failed:", e); }
+    if (!stored) try { localStorage.setItem("printData", payload); stored = true; } catch(e) { console.log("[Print] localStorage failed:", e); }
+    console.log("[Print] stored:", stored, "navigating to /?print=1");
     window.location.href = "/?print=1";
   };
 
@@ -2810,10 +2817,11 @@ export function PrintRenderer() {
   let printData = null;
   try {
     const raw = sessionStorage.getItem("printData") || localStorage.getItem("printData");
+    console.log("[PrintRenderer] raw data length:", raw ? raw.length : "null");
     if (raw) printData = JSON.parse(raw);
     sessionStorage.removeItem("printData");
     localStorage.removeItem("printData");
-  } catch(e) {}
+  } catch(e) { console.log("[PrintRenderer] parse error:", e); }
 
   // If no data, redirect immediately
   if (!printData) {
@@ -2836,17 +2844,19 @@ export function PrintRenderer() {
 
 function PrintCalendarView({ months, avatarMap, logoDataUrl, providers }) {
   useEffect(() => {
-    const t = setTimeout(() => {
-      window.print();
-    }, 300);
+    const goHome = () => { window.location.href = "/"; };
 
-    // Navigate home only after print dialog is fully closed
-    const onAfter = () => { window.location.href = "/"; };
-    window.addEventListener("afterprint", onAfter);
+    // afterprint fires when dialog closes (desktop). iOS doesn't support it, so use fallback.
+    window.addEventListener("afterprint", goHome);
+    // Fallback: 30s is plenty of time to pick orientation and confirm print
+    const fallback = setTimeout(goHome, 30000);
+
+    const t = setTimeout(() => { window.print(); }, 1500);
 
     return () => {
       clearTimeout(t);
-      window.removeEventListener("afterprint", onAfter);
+      clearTimeout(fallback);
+      window.removeEventListener("afterprint", goHome);
     };
   }, []);
 
@@ -2872,18 +2882,17 @@ function PrintCalendarView({ months, avatarMap, logoDataUrl, providers }) {
                 const prov = scheduleData?.[dateKey];
                 const dow = (firstDay + d - 1) % 7;
                 const isWeekend = dow === 0 || dow === 6;
-                const b64 = prov ? avatarMap[prov.id] : null;
                 return (
                   <div key={i} style={{border:`1px solid ${prov?prov.color+"55":"#e8e8e8"}`, borderTop:`3px solid ${prov?prov.color:"#e8e8e8"}`, borderRadius:4, padding:"3px 4px", background:isWeekend?"#fdf8f8":"#fff", display:"flex", flexDirection:"column", overflow:"hidden"}}>
                     <div style={{fontSize:10, fontWeight:800, color:isWeekend?"#e05c5c":"#1a3a35", marginBottom:2}}>{d}</div>
-                    {b64 ? <img src={b64} style={{width:20, height:20, borderRadius:"50%", objectFit:"cover", marginBottom:2, border:`2px solid ${prov.color}`, display:"block"}}/> : prov ? <div style={{width:20, height:20, borderRadius:"50%", background:prov.color, marginBottom:2, display:"flex", alignItems:"center", justifyContent:"center", fontSize:7, fontWeight:900, color:"#fff"}}>{prov.initials}</div> : null}
+                    {prov?.avatar_url ? <img src={prov.avatar_url} crossOrigin="anonymous" style={{width:20, height:20, borderRadius:"50%", objectFit:"cover", marginBottom:2, border:`2px solid ${prov.color}`, display:"block"}}/> : prov ? <div style={{width:20, height:20, borderRadius:"50%", background:prov.color, marginBottom:2, display:"flex", alignItems:"center", justifyContent:"center", fontSize:7, fontWeight:900, color:"#fff"}}>{prov.initials}</div> : null}
                     {prov && <div style={{fontSize:"7.5px", fontWeight:700, color:"#333", lineHeight:1.2}}>{prov.name.replace("Dr. ","")}</div>}
                   </div>
                 );
               })}
             </div>
             <div style={{marginTop:4, paddingTop:4, borderTop:"1px solid #e8e8e8", display:"flex", flexWrap:"wrap", gap:"2px 10px", flexShrink:0}}>
-              {providers.map(p => { const b64 = avatarMap[p.id]; return <div key={p.id} style={{display:"flex", alignItems:"center", gap:4}}>{b64 ? <img src={b64} style={{width:10, height:10, borderRadius:"50%", objectFit:"cover"}}/> : <div style={{width:8, height:8, borderRadius:"50%", background:p.color}}/>}<span style={{fontSize:7, color:"#555", fontWeight:600}}>{p.name}</span></div>; })}
+              {providers.map(p => <div key={p.id} style={{display:"flex", alignItems:"center", gap:4}}>{p.avatar_url ? <img src={p.avatar_url} crossOrigin="anonymous" style={{width:10, height:10, borderRadius:"50%", objectFit:"cover"}}/> : <div style={{width:8, height:8, borderRadius:"50%", background:p.color}}/>}<span style={{fontSize:7, color:"#555", fontWeight:600}}>{p.name}</span></div>)}
             </div>
           </div>
         );
