@@ -481,10 +481,25 @@ export function ProvidersPage({ onMessage, currentProvider }) {
                   }
 
                   {/* Message button */}
-                  <button style={btnS({width:"100%", padding:"9px", fontSize:13})}
-                    onClick={()=>onMessage(p)}>
-                    Message {p.name.replace("Dr. ","")}
-                  </button>
+                  <div style={{display:"flex", gap:8}}>
+                    <button style={btnS({flex:1, padding:"9px", fontSize:13})}
+                      onClick={()=>onMessage(p)}>
+                      Message {p.name.replace("Dr. ","")}
+                    </button>
+                    {p.phone && (
+                      <a href={`tel:${p.phone.replace(/\D/g,"")}`} style={{
+                        ...btnS(), flex:1, padding:"9px", fontSize:13,
+                        background:"#fff", color:C.teal, border:`1.5px solid ${C.teal}`,
+                        display:"flex", alignItems:"center", justifyContent:"center",
+                        gap:6, textDecoration:"none", borderRadius:8,
+                      }}>
+                        <svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+                          <path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z" fill={C.teal}/>
+                        </svg>
+                        Call
+                      </a>
+                    )}
+                  </div>
                 </>
               }
             </div>
