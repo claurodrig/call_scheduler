@@ -1007,7 +1007,6 @@ export function PrintSchedulePage({ onBack }) {
   const [providers, setProviders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [logoDataUrl, setLogoDataUrl] = useState(null);
-  const [printData, setPrintData] = useState(null);
 
   const monthOptions = [];
   for (let i = -6; i <= 12; i++) {
@@ -1111,46 +1110,15 @@ export function PrintSchedulePage({ onBack }) {
       return;
     }
 
-    // iOS: use history.pushState to change URL without page reload
-    // This keeps all data in memory — no storage needed, no page reload on orientation change
+    // iOS: fire a window event so App can render PrintCalendarView at the top level
+    // (replacing the entire app DOM, not just overlaying it)
     const payload = {
       months: months.map(m => ({ ...m, scheduleData: m.scheduleData })),
       providers: providers.map(p => ({ id: p.id, name: p.name, color: p.color, initials: p.initials, avatar_url: p.avatar_url })),
       logoDataUrl,
     };
-    window.__printPayload = payload;
-    history.pushState({ print: true }, "", "/?print=1");
-    // Trigger App to re-read the URL and render PrintRenderer
-    window.dispatchEvent(new PopStateEvent("popstate", { state: { print: true } }));
-    setPrintData(payload);
+    window.dispatchEvent(new CustomEvent("beaches-print", { detail: payload }));
   };
-
-  // When printData is set, trigger print after React has painted the overlay
-  useEffect(() => {
-    if (!printData) return;
-    const t = setTimeout(() => {
-      window.print();
-      // After print, restore URL and clear overlay
-      const onAfter = () => {
-        history.pushState({}, "", "/");
-        setPrintData(null);
-      };
-      window.addEventListener("afterprint", onAfter, { once: true });
-      // iOS fallback — afterprint may not fire
-      setTimeout(onAfter, 30000);
-    }, 1500);
-    return () => clearTimeout(t);
-  }, [printData]);
-
-  // Render print overlay — stays in same page context so iOS orientation change works
-  if (printData) {
-    return <PrintCalendarView
-      months={printData.months}
-      avatarMap={{}}
-      logoDataUrl={printData.logoDataUrl}
-      providers={printData.providers}
-    />;
-  }
 
   return (
     <div style={{paddingBottom:20}}>
@@ -2874,7 +2842,7 @@ export function PrintRenderer() {
   );
 }
 
-function PrintCalendarView({ months, avatarMap, logoDataUrl, providers }) {
+export function PrintCalendarView({ months, avatarMap, logoDataUrl, providers }) {
   return (
     <div style={{background:"#fff", fontFamily:"-apple-system,Helvetica,sans-serif"}}>
       <style>{`*{margin:0;padding:0;box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact;}@page{margin:0.2in;size:landscape;}body{background:#fff;}`}</style>

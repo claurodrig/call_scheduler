@@ -19,6 +19,7 @@ import {
   CallLogicPage,
   PrintSchedulePage,
   PrintRenderer,
+  PrintCalendarView,
 } from "./components";
 
 const NAV = [
@@ -50,35 +51,16 @@ function LoginPage() {
         </div>
         <p style={{fontFamily:ff, fontWeight:900, fontSize:24, color:C.text, marginBottom:6, textAlign:"center"}}>Welcome back</p>
         <p style={{fontFamily:ffb, fontSize:13, color:C.sub, marginBottom:32, textAlign:"center"}}>Sign in to your Beaches OBGYN account</p>
-
         <div style={{marginBottom:16}}>
           <label style={lblS}>Email</label>
-          <input
-            style={inpS}
-            type="email"
-            placeholder="you@example.com"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-            onKeyDown={e => e.key === "Enter" && handleLogin()}
-          />
+          <input style={inpS} type="email" placeholder="you@example.com" value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === "Enter" && handleLogin()}/>
         </div>
         <div style={{marginBottom:24}}>
           <label style={lblS}>Password</label>
-          <input
-            style={inpS}
-            type="password"
-            placeholder="••••••••"
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            onKeyDown={e => e.key === "Enter" && handleLogin()}
-          />
+          <input style={inpS} type="password" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === "Enter" && handleLogin()}/>
         </div>
         {error && <p style={{color:C.coral, fontSize:13, marginBottom:12, fontFamily:ffb}}>{error}</p>}
-        <button
-          style={{...btnS, width:"100%", opacity: loading ? 0.7 : 1}}
-          onClick={handleLogin}
-          disabled={loading}
-        >
+        <button style={{...btnS, width:"100%", opacity: loading ? 0.7 : 1}} onClick={handleLogin} disabled={loading}>
           {loading ? "Signing in…" : "Sign In"}
         </button>
       </div>
@@ -109,7 +91,6 @@ function SetPasswordPage({ onDone }) {
         </div>
         <p style={{fontFamily:ff, fontWeight:900, fontSize:24, color:C.text, marginBottom:6, textAlign:"center"}}>Set Your Password</p>
         <p style={{fontFamily:ffb, fontSize:13, color:C.sub, marginBottom:32, textAlign:"center"}}>Choose a password to complete your account setup.</p>
-
         <div style={{marginBottom:16}}>
           <label style={lblS}>New Password</label>
           <input style={inpS} type="password" placeholder="At least 6 characters" value={password} onChange={e => setPassword(e.target.value)}/>
@@ -154,11 +135,9 @@ function AppInner() {
   const [isInvite, setIsInvite]               = useState(false);
   const [unreadCount, setUnreadCount]         = useState(0);
 
-  // Listen for notification tap navigation via BroadcastChannel
   useEffect(() => {
     const bc = new BroadcastChannel("notif_nav");
     bc.onmessage = (event) => {
-      console.log("NOTIF_NAV received:", event.data);
       const action = event.data?.action;
       if (action === "admin-requests") setSub("admin");
       else if (action === "my-requests") { setSub(null); setTab("request"); }
@@ -168,7 +147,6 @@ function AppInner() {
     return () => bc.close();
   }, []);
 
-  // Handle ?action= param when app opens fresh from notification tap
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const action = params.get("action");
@@ -179,7 +157,6 @@ function AppInner() {
     else if (action === "home") { setSub(null); setTab("home"); }
   }, []);
 
-  // Poll for unread notifications every 30 seconds
   useEffect(() => {
     if (!currentProvider) return;
     const refresh = () => fetchNotifications(currentProvider.id).then(notifs => {
@@ -191,27 +168,19 @@ function AppInner() {
   }, [currentProvider]);
 
   useEffect(() => {
-    // Detect invite link (Supabase puts type=invite in the hash)
     const hash = window.location.hash;
-    if (hash.includes("type=invite")) {
-      setIsInvite(true);
-    }
+    if (hash.includes("type=invite")) setIsInvite(true);
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setAuthLoading(false);
-      if (session?.user?.email) {
-        fetchCurrentProvider(session.user.email).then(setCurrentProvider);
-      }
+      if (session?.user?.email) fetchCurrentProvider(session.user.email).then(setCurrentProvider);
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
-      if (session?.user?.email) {
-        fetchCurrentProvider(session.user.email).then(setCurrentProvider);
-      } else {
-        setCurrentProvider(null);
-      }
+      if (session?.user?.email) fetchCurrentProvider(session.user.email).then(setCurrentProvider);
+      else setCurrentProvider(null);
     });
 
     return () => subscription.unsubscribe();
@@ -219,9 +188,7 @@ function AppInner() {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    setSub(null);
-    setTab("home");
-    setIsInvite(false);
+    setSub(null); setTab("home"); setIsInvite(false);
   };
 
   if (authLoading) return (
@@ -234,7 +201,6 @@ function AppInner() {
   if (!session) return <LoginPage/>;
 
   const onMessage = p => { setMsgRecip(p); setSub("messages"); };
-
   const handleBell = () => {
     setSub("notifications");
     setUnreadCount(0);
@@ -263,26 +229,14 @@ function AppInner() {
         {renderBody()}
       </div>
       {!sub && (
-        <nav style={{
-          display:"flex", borderTop:`1px solid ${C.grey}`, background:"#fff",
-          position:"sticky", bottom:0, zIndex:10,
-        }}>
+        <nav style={{display:"flex", borderTop:`1px solid ${C.grey}`, background:"#fff", position:"sticky", bottom:0, zIndex:10}}>
           {NAV.map(([key, label, Icon]) => {
             const active = tab === key;
             return (
-              <button
-                key={key}
-                onClick={() => { setTab(key); setSub(null); }}
-                style={{
-                  flex:1, border:"none", background:"none", padding:"10px 0 8px",
-                  display:"flex", flexDirection:"column", alignItems:"center", gap:3,
-                  cursor:"pointer",
-                }}
-              >
+              <button key={key} onClick={() => { setTab(key); setSub(null); }}
+                style={{flex:1, border:"none", background:"none", padding:"10px 0 8px", display:"flex", flexDirection:"column", alignItems:"center", gap:3, cursor:"pointer"}}>
                 <Icon color={active ? C.teal : C.sub}/>
-                <span style={{fontFamily:ffb, fontSize:10, color: active ? C.teal : C.sub, fontWeight: active ? 800 : 500}}>
-                  {label}
-                </span>
+                <span style={{fontFamily:ffb, fontSize:10, color: active ? C.teal : C.sub, fontWeight: active ? 800 : 500}}>{label}</span>
               </button>
             );
           })}
@@ -293,8 +247,37 @@ function AppInner() {
 }
 
 export default function App() {
-  if (new URLSearchParams(window.location.search).get("print") === "1") {
-    return <PrintRenderer />;
+  const [printPayload, setPrintPayload] = useState(null);
+  const isPrintRoute = new URLSearchParams(window.location.search).get("print") === "1";
+
+  // Listen for beaches-print event from PrintSchedulePage
+  useEffect(() => {
+    const handler = (e) => setPrintPayload(e.detail);
+    window.addEventListener("beaches-print", handler);
+    return () => window.removeEventListener("beaches-print", handler);
+  }, []);
+
+  // Trigger print after PrintCalendarView renders at top level
+  useEffect(() => {
+    if (!printPayload) return;
+    const t = setTimeout(() => {
+      window.print();
+      const done = () => setPrintPayload(null);
+      window.addEventListener("afterprint", done, { once: true });
+      setTimeout(done, 30000); // iOS fallback — afterprint may not fire
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [printPayload]);
+
+  // iOS: PrintCalendarView renders as the ENTIRE app — no header, no nav, nothing else in DOM
+  if (printPayload) {
+    return <PrintCalendarView
+      months={printPayload.months}
+      logoDataUrl={printPayload.logoDataUrl}
+      providers={printPayload.providers}
+    />;
   }
+
+  if (isPrintRoute) return <PrintRenderer />;
   return <AppInner />;
 }
