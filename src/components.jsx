@@ -1979,7 +1979,7 @@ function HistoryImporter({ providers }) {
                     <input
                       type="number" min={0} value={m[type]}
                       onChange={e => setVal(p.id, activeMonth, type, e.target.value)}
-                      style={{...inpS(), padding:"6px 8px", fontSize:14, textAlign:"center", width:"100%", boxSizing:"border-box",
+                      style={{...inpS, padding:"6px 8px", fontSize:14, textAlign:"center", width:"100%", boxSizing:"border-box",
                         borderColor: m[type] > 0 ? color : undefined}}
                     />
                   </div>
