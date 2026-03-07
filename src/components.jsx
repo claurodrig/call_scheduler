@@ -1038,101 +1038,219 @@ export function PrintSchedulePage({ onBack }) {
 
   useEffect(() => { fetchProviders().then(setProviders); }, []);
 
-  const handlePrint = async () => {
+  const hexToRgb = (hex) => {
+    if (!hex || hex.length < 7) return [100,100,100];
+    return [parseInt(hex.slice(1,3),16), parseInt(hex.slice(3,5),16), parseInt(hex.slice(5,7),16)];
+  };
+
+  const toBase64 = (url) => new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = img.width; canvas.height = img.height;
+        canvas.getContext("2d").drawImage(img, 0, 0);
+        resolve(canvas.toDataURL("image/png"));
+      } catch { resolve(null); }
+    };
+    img.onerror = () => resolve(null);
+    img.src = url;
+  });
+
+  const handleExport = async () => {
     if (selectedMonths.length === 0) return;
     setLoading(true);
 
-    const results = await Promise.all(
-      selectedMonths.map(({ year, month }) =>
-        fetchSchedule(year, month).then(data => ({ year, month, data }))
-      )
-    );
-    const merged = {};
-    results.forEach(({ year, month, data }) => { merged[`${year}-${month}`] = data; });
+    try {
+      const { jsPDF } = await import("https://cdn.jsdelivr.net/npm/jspdf@2.5.1/+esm");
 
-    const toBase64 = (url) => new Promise((resolve) => {
-      const img = new Image();
-      img.crossOrigin = "anonymous";
-      img.onload = () => {
-        try {
-          const canvas = document.createElement("canvas");
-          canvas.width = img.width; canvas.height = img.height;
-          canvas.getContext("2d").drawImage(img, 0, 0);
-          resolve(canvas.toDataURL("image/png"));
-        } catch { resolve(null); }
-      };
-      img.onerror = () => resolve(null);
-      img.src = url;
-    });
+      // Fetch schedules
+      const results = await Promise.all(
+        selectedMonths.map(({ year, month }) =>
+          fetchSchedule(year, month).then(data => ({ year, month, data }))
+        )
+      );
 
-    const avatarMap = {};
-    await Promise.all(providers.filter(p => p.avatar_url).map(async p => {
-      avatarMap[p.id] = await toBase64(p.avatar_url);
-    }));
+      // Fetch avatars as base64
+      const avatarMap = {};
+      await Promise.all(providers.filter(p => p.avatar_url).map(async p => {
+        avatarMap[p.id] = await toBase64(p.avatar_url);
+      }));
 
-    setLoading(false);
+      // Landscape letter: 11 x 8.5 inches at 72pt/in = 792 x 612
+      const pageW = 792, pageH = 612;
+      const margin = 20;
+      const contentW = pageW - margin * 2;
 
-    // Build per-month print data as React-renderable objects
-    const months = selectedMonths.map(({ year, month }) => {
-      const scheduleData = merged[`${year}-${month}`];
-      const days = getDays(year, month);
-      const firstDay = getFirst(year, month);
-      const cells = [];
-      for (let i = 0; i < firstDay; i++) cells.push(null);
-      for (let d = 1; d <= days; d++) cells.push(d);
-      while (cells.length % 7 !== 0) cells.push(null);
-      return { year, month, scheduleData, cells, numRows: Math.ceil(cells.length / 7) };
-    });
+      const pdf = new jsPDF({ orientation: "landscape", unit: "pt", format: "letter" });
 
-    const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
-    if (!isIOS) {
-      // Desktop: build HTML string and open new tab
-      const pagesHtml = months.map(({ year, month, scheduleData, cells, numRows }) => {
-        const monthName = MONTHS[month];
-        const firstDay = getFirst(year, month);
-        const cellsHtml = cells.map((d) => {
-          if (!d) return `<div style="background:#fafafa;border-radius:4px;"></div>`;
+      for (let mi = 0; mi < selectedMonths.length; mi++) {
+        const { year, month } = selectedMonths[mi];
+        const scheduleData = results[mi].data;
+        if (mi > 0) pdf.addPage();
+
+        const days = new Date(year, month + 1, 0).getDate();
+        const firstDay = new Date(year, month, 1).getDay();
+        const cells = [];
+        for (let i = 0; i < firstDay; i++) cells.push(null);
+        for (let d = 1; d <= days; d++) cells.push(d);
+        while (cells.length % 7 !== 0) cells.push(null);
+        const numRows = Math.ceil(cells.length / 7);
+
+        let y = margin;
+
+        // Logo
+        if (logoDataUrl) {
+          pdf.addImage(logoDataUrl, "PNG", margin, y, 90, 24, "", "FAST");
+        } else {
+          pdf.setFont("helvetica","bold"); pdf.setFontSize(13); pdf.setTextColor(26,140,120);
+          pdf.text("Beaches OBGYN", margin, y + 16);
+        }
+
+        // Month title
+        pdf.setFont("helvetica","bold"); pdf.setFontSize(22); pdf.setTextColor(26,58,53);
+        pdf.text(`${MONTHS[month]} ${year}`, pageW - margin, y + 18, { align: "right" });
+        pdf.setFont("helvetica","normal"); pdf.setFontSize(8); pdf.setTextColor(136,136,136);
+        pdf.text("Call Schedule", pageW - margin, y + 28, { align: "right" });
+        y += 32;
+
+        // Divider
+        pdf.setDrawColor(26,140,120); pdf.setLineWidth(1.5);
+        pdf.line(margin, y, pageW - margin, y);
+        y += 5;
+
+        // Legend row
+        let lx = margin;
+        pdf.setFontSize(7); pdf.setFont("helvetica","bold");
+        for (const p of providers) {
+          const [r,g,b] = hexToRgb(p.color);
+          const b64 = avatarMap[p.id];
+          if (b64) {
+            // Clip circle for avatar
+            pdf.saveGraphicsState();
+            pdf.circle(lx + 5, y + 5, 5, "S");
+            try { pdf.addImage(b64, "PNG", lx, y, 10, 10, "", "FAST"); } catch {}
+            pdf.restoreGraphicsState();
+          } else {
+            pdf.setFillColor(r,g,b);
+            pdf.circle(lx + 5, y + 5, 5, "F");
+            pdf.setTextColor(255,255,255); pdf.setFontSize(5);
+            pdf.text(p.initials || "", lx + 5, y + 7, { align: "center" });
+          }
+          pdf.setTextColor(60,60,60); pdf.setFontSize(7.5); pdf.setFont("helvetica","bold");
+          pdf.text(p.name, lx + 13, y + 7);
+          lx += pdf.getTextWidth(p.name) + 20;
+          if (lx > pageW - margin - 60) { lx = margin; y += 12; }
+        }
+        y += 13;
+
+        // Weekday headers
+        const colW = contentW / 7;
+        const WD = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+        for (let col = 0; col < 7; col++) {
+          const cx = margin + col * colW;
+          const isWEnd = col === 0 || col === 6;
+          pdf.setFillColor(240, 250, 248);
+          pdf.roundedRect(cx, y, colW - 2, 14, 2, 2, "F");
+          pdf.setFont("helvetica","bold"); pdf.setFontSize(8);
+          pdf.setTextColor(isWEnd ? 224 : 26, isWEnd ? 92 : 140, isWEnd ? 92 : 120);
+          pdf.text(WD[col], cx + colW/2 - 1, y + 9, { align: "center" });
+        }
+        y += 16;
+
+        // Calendar cells
+        const remainH = pageH - margin - y;
+        const rowH = remainH / numRows;
+
+        cells.forEach((d, i) => {
+          const row = Math.floor(i / 7);
+          const col = i % 7;
+          const cx = margin + col * colW;
+          const cy = y + row * rowH;
+          const isWEnd = col === 0 || col === 6;
+
+          if (!d) {
+            pdf.setFillColor(249,249,249);
+            pdf.roundedRect(cx, cy, colW - 2, rowH - 2, 2, 2, "F");
+            return;
+          }
+
           const dateKey = `${year}-${String(month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
           const prov = scheduleData?.[dateKey];
-          const dow = (firstDay + d - 1) % 7;
-          const isWeekend = dow === 0 || dow === 6;
-          const b64 = prov ? avatarMap[prov.id] : null;
-          const avatarHtml = b64 ? `<img src="${b64}" style="width:20px;height:20px;border-radius:50%;object-fit:cover;margin-bottom:2px;border:2px solid ${prov.color};display:block;"/>` : prov ? `<div style="width:20px;height:20px;border-radius:50%;background:${prov.color};margin-bottom:2px;display:flex;align-items:center;justify-content:center;font-size:7px;font-weight:900;color:#fff;">${prov.initials}</div>` : "";
-          const nameHtml = prov ? `<div style="font-size:7.5px;font-weight:700;color:#333;line-height:1.2;">${prov.name.replace("Dr. ","")}</div>` : "";
-          return `<div style="border:1px solid ${prov?prov.color+"55":"#e8e8e8"};border-top:3px solid ${prov?prov.color:"#e8e8e8"};border-radius:4px;padding:3px 4px;background:${isWeekend?"#fdf8f8":"#fff"};display:flex;flex-direction:column;overflow:hidden;"><div style="font-size:10px;font-weight:800;color:${isWeekend?"#e05c5c":"#1a3a35"};margin-bottom:2px;">${d}</div>${avatarHtml}${nameHtml}</div>`;
-        }).join("");
-        const legendHtml = providers.map(p => { const b64 = avatarMap[p.id]; const dot = b64 ? `<img src="${b64}" style="width:10px;height:10px;border-radius:50%;object-fit:cover;"/>` : `<div style="width:8px;height:8px;border-radius:50%;background:${p.color};"></div>`; return `<div style="display:flex;align-items:center;gap:4px;">${dot}<span style="font-size:7px;color:#555;font-weight:600;">${p.name}</span></div>`; }).join("");
-        const logoHtml = logoDataUrl ? `<img src="${logoDataUrl}" style="height:32px;object-fit:contain;"/>` : `<span style="font-weight:900;font-size:15px;color:#1a8c78;">Beaches OBGYN</span>`;
-        return `<div style="width:100%;height:99vh;box-sizing:border-box;background:#fff;page-break-after:always;page-break-inside:avoid;display:flex;flex-direction:column;padding:12px 14px;overflow:hidden;"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;border-bottom:2px solid #1a8c78;padding-bottom:6px;flex-shrink:0;">${logoHtml}<div style="text-align:right;"><div style="font-size:17px;font-weight:900;color:#1a3a35;">${monthName} ${year}</div><div style="font-size:8px;color:#888;">Call Schedule</div></div></div><div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:2px;flex-shrink:0;">${["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map((d,i)=>`<div style="text-align:center;padding:2px 0;font-size:8px;font-weight:900;color:${i===0||i===6?"#e05c5c":"#1a8c78"};background:#f0faf8;border-radius:3px;">${d}</div>`).join("")}</div><div style="display:grid;grid-template-columns:repeat(7,1fr);grid-template-rows:repeat(${numRows},1fr);gap:2px;flex:1;overflow:hidden;">${cellsHtml}</div><div style="margin-top:4px;padding-top:4px;border-top:1px solid #e8e8e8;display:flex;flex-wrap:wrap;gap:2px 10px;flex-shrink:0;">${legendHtml}</div></div>`;
-      }).join("");
-      const w = window.open("", "_blank");
-      if (w) { w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><style>*{margin:0;padding:0;box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact;}body{background:#fff;}@page{margin:0.2in;}</style></head><body>${pagesHtml}</body></html>`); w.document.close(); setTimeout(() => w.print(), 800); }
-      return;
+          const [pr,pg,pb] = prov ? hexToRgb(prov.color) : [224,224,224];
+
+          // Cell background
+          pdf.setFillColor(isWEnd ? 253 : 255, isWEnd ? 248 : 255, isWEnd ? 248 : 255);
+          pdf.roundedRect(cx, cy, colW - 2, rowH - 2, 2, 2, "F");
+
+          // Top color bar
+          pdf.setFillColor(pr,pg,pb);
+          pdf.roundedRect(cx, cy, colW - 2, 3, 1, 1, "F");
+
+          // Border
+          pdf.setDrawColor(pr,pg,pb); pdf.setLineWidth(0.3);
+          pdf.roundedRect(cx, cy, colW - 2, rowH - 2, 2, 2, "S");
+
+          // Day number
+          pdf.setFont("helvetica","bold"); pdf.setFontSize(9);
+          pdf.setTextColor(isWEnd ? 224 : 26, isWEnd ? 92 : 58, isWEnd ? 92 : 53);
+          pdf.text(String(d), cx + 4, cy + 11);
+
+          if (prov) {
+            const b64 = avatarMap[prov.id];
+            const avatarSize = Math.min(rowH * 0.45, colW * 0.55, 26);
+            const ax = cx + (colW - 2) / 2 - avatarSize / 2;
+            const ay = cy + 13;
+            if (b64) {
+              try { pdf.addImage(b64, "PNG", ax, ay, avatarSize, avatarSize, "", "FAST"); } catch {}
+            } else {
+              const [ar,ag,ab] = hexToRgb(prov.color);
+              pdf.setFillColor(ar,ag,ab);
+              pdf.circle(ax + avatarSize/2, ay + avatarSize/2, avatarSize/2, "F");
+              pdf.setTextColor(255,255,255); pdf.setFontSize(avatarSize * 0.35);
+              pdf.text(prov.initials || "", ax + avatarSize/2, ay + avatarSize/2 + avatarSize*0.13, { align: "center" });
+            }
+            // Provider name below avatar
+            const nameY = ay + avatarSize + 4;
+            if (nameY < cy + rowH - 2) {
+              pdf.setFont("helvetica","bold"); pdf.setFontSize(6.5);
+              pdf.setTextColor(51,51,51);
+              const shortName = prov.name.replace("Dr. ","");
+              const words = shortName.split(" ");
+              if (words.length > 1 && pdf.getTextWidth(shortName) > colW - 6) {
+                pdf.text(words[0], cx + (colW-2)/2, nameY, { align: "center" });
+                pdf.text(words.slice(1).join(" "), cx + (colW-2)/2, nameY + 7, { align: "center" });
+              } else {
+                pdf.text(shortName, cx + (colW-2)/2, nameY, { align: "center" });
+              }
+            }
+          }
+        });
+      }
+
+      const fileName = selectedMonths.length === 1
+        ? `${MONTHS[selectedMonths[0].month]}_${selectedMonths[0].year}_Call_Schedule.pdf`
+        : `Call_Schedule_${selectedMonths.length}_months.pdf`;
+      pdf.save(fileName);
+    } catch (err) {
+      console.error("PDF export failed:", err);
+      alert("PDF export failed. Please try again.");
     }
 
-    // iOS: store in localStorage and navigate to /print.html
-    // This is a static HTML file — no React bundle, no JS framework, just pure HTML
-    // iOS loads it fresh, renders the calendar immediately, orientation changes re-load the same static file
-    const payload = {
-      months: months.map(m => ({ ...m, scheduleData: m.scheduleData })),
-      providers: providers.map(p => ({ id: p.id, name: p.name, color: p.color, initials: p.initials, avatar_url: p.avatar_url })),
-      logoDataUrl,
-    };
-    localStorage.setItem("printData", JSON.stringify(payload));
-    window.location.href = "/print.html";
+    setLoading(false);
   };
 
   return (
     <div style={{paddingBottom:20}}>
-      {/* Normal app UI */}
       <div style={{display:"flex", alignItems:"center", gap:10, marginBottom:16}}>
         <button onClick={onBack} style={{background:"none", border:"none", fontSize:22, cursor:"pointer", color:C.primary}}>‹</button>
-        <span style={{fontFamily:ff, fontWeight:900, fontSize:16, color:C.text}}>Print Schedule</span>
+        <span style={{fontFamily:ff, fontWeight:900, fontSize:16, color:C.text}}>Export Schedule PDF</span>
       </div>
 
       <div style={card({padding:"12px 14px", marginBottom:14, background:`${C.wave}88`, border:`1px solid ${C.teal}33`})}>
-        <p style={{margin:0, fontFamily:ff, fontWeight:800, fontSize:13, color:C.teal}}>Select Months to Print</p>
-        <p style={{margin:"4px 0 0", fontFamily:ffb, fontSize:12, color:C.sub}}>Each month prints as a full 8.5×11 page. Select one or more.</p>
+        <p style={{margin:0, fontFamily:ff, fontWeight:800, fontSize:13, color:C.teal}}>Select Months to Export</p>
+        <p style={{margin:"4px 0 0", fontFamily:ffb, fontSize:12, color:C.sub}}>Each month exports as a landscape page. Select one or more.</p>
       </div>
 
       <div style={{display:"flex", flexDirection:"column", gap:8, marginBottom:16}}>
@@ -1170,9 +1288,9 @@ export function PrintSchedulePage({ onBack }) {
       <button
         style={btnS({opacity:(loading || selectedMonths.length === 0) ? 0.5 : 1})}
         disabled={loading || selectedMonths.length === 0}
-        onClick={handlePrint}
+        onClick={handleExport}
       >
-        {loading ? "Loading schedule…" : `Print ${selectedMonths.length} Month${selectedMonths.length !== 1 ? "s" : ""}`}
+        {loading ? "Generating PDF…" : `Export ${selectedMonths.length} Month${selectedMonths.length !== 1 ? "s" : ""} as PDF`}
       </button>
     </div>
   );
@@ -2417,6 +2535,7 @@ export function SettingsPage({ onBack, onLogout, currentProvider }) {
 export function UpcomingVacationsPage({ onBack }) {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading]   = useState(true);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     fetchRequests().then(all => {
@@ -2431,18 +2550,128 @@ export function UpcomingVacationsPage({ onBack }) {
   }, []);
 
   const formatDate = d => new Date(d + "T00:00:00").toLocaleDateString("en-US", { month:"short", day:"numeric", year:"numeric" });
+  const getDaysCount = (start, end) => Math.round((new Date(end+"T00:00:00") - new Date(start+"T00:00:00")) / (1000*60*60*24)) + 1;
 
-  const getDaysCount = (start, end) => {
-    const s = new Date(start + "T00:00:00");
-    const e = new Date(end + "T00:00:00");
-    return Math.round((e - s) / (1000*60*60*24)) + 1;
+  const hexToRgb = (hex) => {
+    if (!hex || hex.length < 7) return [100,100,100];
+    return [parseInt(hex.slice(1,3),16), parseInt(hex.slice(3,5),16), parseInt(hex.slice(5,7),16)];
+  };
+
+  const handleExportPDF = async () => {
+    if (requests.length === 0) return;
+    setExporting(true);
+    try {
+      const { jsPDF } = await import("https://cdn.jsdelivr.net/npm/jspdf@2.5.1/+esm");
+      const pdf = new jsPDF({ orientation: "portrait", unit: "pt", format: "letter" });
+      const pageW = 612, margin = 36;
+      const contentW = pageW - margin * 2;
+      let y = margin;
+
+      // Header
+      pdf.setFont("helvetica","bold"); pdf.setFontSize(20); pdf.setTextColor(26,58,53);
+      pdf.text("Beaches OBGYN", margin, y + 16);
+      pdf.setFont("helvetica","normal"); pdf.setFontSize(10); pdf.setTextColor(136,136,136);
+      pdf.text("Upcoming Vacations & Time Off", margin, y + 30);
+      pdf.setFont("helvetica","normal"); pdf.setFontSize(9); pdf.setTextColor(136,136,136);
+      const genDate = new Date().toLocaleDateString("en-US", { month:"long", day:"numeric", year:"numeric" });
+      pdf.text(`Generated ${genDate}`, pageW - margin, y + 30, { align: "right" });
+      y += 40;
+
+      // Divider
+      pdf.setDrawColor(26,140,120); pdf.setLineWidth(1.5);
+      pdf.line(margin, y, pageW - margin, y);
+      y += 16;
+
+      // Group by month
+      const grouped = {};
+      requests.forEach(r => {
+        const key = r.start_date.slice(0,7);
+        if (!grouped[key]) grouped[key] = [];
+        grouped[key].push(r);
+      });
+
+      for (const [monthKey, reqs] of Object.entries(grouped)) {
+        const [yr, mo] = monthKey.split("-").map(Number);
+        const monthLabel = new Date(yr, mo - 1, 1).toLocaleDateString("en-US", { month:"long", year:"numeric" });
+
+        // Month header
+        pdf.setFillColor(240,250,248);
+        pdf.roundedRect(margin, y - 2, contentW, 18, 3, 3, "F");
+        pdf.setFont("helvetica","bold"); pdf.setFontSize(10); pdf.setTextColor(26,140,120);
+        pdf.text(monthLabel, margin + 8, y + 10);
+        y += 24;
+
+        for (const r of reqs) {
+          if (y > 750) { pdf.addPage(); y = margin; }
+          const [pr,pg,pb] = hexToRgb(r.providers?.color || "#1a8c78");
+          const days = getDaysCount(r.start_date, r.end_date);
+          const today = new Date(); today.setHours(0,0,0,0);
+          const isActive = new Date(r.start_date+"T00:00:00") <= today;
+
+          // Left color bar
+          pdf.setFillColor(pr,pg,pb);
+          pdf.roundedRect(margin, y, 4, 44, 2, 2, "F");
+
+          // Card background
+          pdf.setFillColor(255,255,255);
+          pdf.setDrawColor(pr,pg,pb); pdf.setLineWidth(0.5);
+          pdf.roundedRect(margin + 6, y, contentW - 6, 44, 3, 3, "FD");
+
+          // Provider name
+          pdf.setFont("helvetica","bold"); pdf.setFontSize(11); pdf.setTextColor(30,30,30);
+          pdf.text(r.providers?.name || "Unknown", margin + 16, y + 14);
+
+          // Active badge
+          if (isActive) {
+            pdf.setFillColor(26,140,120);
+            pdf.roundedRect(margin + 16 + pdf.getTextWidth(r.providers?.name || "") + 6, y + 5, 36, 11, 3, 3, "F");
+            pdf.setFont("helvetica","bold"); pdf.setFontSize(7); pdf.setTextColor(255,255,255);
+            pdf.text("ACTIVE", margin + 16 + pdf.getTextWidth(r.providers?.name || "") + 10, y + 13);
+          }
+
+          // Type
+          pdf.setFont("helvetica","normal"); pdf.setFontSize(9); pdf.setTextColor(100,100,100);
+          pdf.text(r.type, margin + 16, y + 27);
+
+          // Date range
+          pdf.setFont("helvetica","bold"); pdf.setFontSize(9); pdf.setTextColor(60,60,60);
+          pdf.text(`${formatDate(r.start_date)} → ${formatDate(r.end_date)}`, margin + 16, y + 39);
+
+          // Days count badge
+          pdf.setFillColor(pr,pg,pb);
+          pdf.roundedRect(pageW - margin - 50, y + 10, 44, 20, 4, 4, "F");
+          pdf.setFont("helvetica","bold"); pdf.setFontSize(9); pdf.setTextColor(255,255,255);
+          pdf.text(`${days}d`, pageW - margin - 28, y + 23, { align: "center" });
+
+          y += 52;
+        }
+        y += 8;
+      }
+
+      pdf.save(`Beaches_OBGYN_Vacations_${new Date().toISOString().slice(0,10)}.pdf`);
+    } catch(err) {
+      console.error("PDF export failed:", err);
+      alert("Export failed. Please try again.");
+    }
+    setExporting(false);
   };
 
   return (
     <div style={{paddingBottom:20}}>
-      <div style={{display:"flex", alignItems:"center", gap:10, marginBottom:16}}>
-        <button onClick={onBack} style={{background:"none", border:"none", fontSize:22, cursor:"pointer", color:C.primary}}>‹</button>
-        <span style={{fontFamily:ff, fontWeight:900, fontSize:16, color:C.text}}>Upcoming Vacations</span>
+      <div style={{display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16}}>
+        <div style={{display:"flex", alignItems:"center", gap:10}}>
+          <button onClick={onBack} style={{background:"none", border:"none", fontSize:22, cursor:"pointer", color:C.primary}}>‹</button>
+          <span style={{fontFamily:ff, fontWeight:900, fontSize:16, color:C.text}}>Upcoming Vacations</span>
+        </div>
+        {!loading && requests.length > 0 && (
+          <button
+            onClick={handleExportPDF}
+            disabled={exporting}
+            style={{...btnS(), padding:"7px 12px", fontSize:11, opacity: exporting ? 0.6 : 1}}
+          >
+            {exporting ? "Exporting…" : "Export PDF"}
+          </button>
+        )}
       </div>
       {loading && <div style={{textAlign:"center", padding:"20px", color:C.sub, fontFamily:ff, fontSize:13}}>Loading...</div>}
       {!loading && requests.length === 0 && (
