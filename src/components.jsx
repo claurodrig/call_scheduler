@@ -1199,20 +1199,36 @@ export function PrintSchedulePage({ onBack }) {
 
           if (prov) {
             const b64 = avatarMap[prov.id];
-            const avatarSize = Math.min(rowH * 0.45, colW * 0.55, 26);
-            const ax = cx + (colW - 2) / 2 - avatarSize / 2;
+            // Bigger avatar — use more of the cell height, capped so it fits
+            const avatarSize = Math.min(rowH * 0.55, colW * 0.65, 34);
+            const cr = avatarSize / 2; // circle radius
+            const ax = cx + (colW - 2) / 2 - cr; // top-left x of bounding square
             const ay = cy + 13;
+            const acx = ax + cr; // circle center x
+            const acy = ay + cr; // circle center y
+
             if (b64) {
+              // Draw circular clip: fill white circle first, then image clipped by redrawing circle as stroke
+              // jsPDF doesn't support true clip paths for images, so we draw a filled circle bg,
+              // then overdraw the image, then redraw the circle border to mask edges
+              const [ar,ag,ab] = hexToRgb(prov.color);
+              // White circle background
+              pdf.setFillColor(255,255,255);
+              pdf.circle(acx, acy, cr, "F");
               try { pdf.addImage(b64, "PNG", ax, ay, avatarSize, avatarSize, "", "FAST"); } catch {}
+              // Colored border ring to make it look circular
+              pdf.setDrawColor(ar,ag,ab); pdf.setLineWidth(1.2);
+              pdf.circle(acx, acy, cr, "S");
             } else {
               const [ar,ag,ab] = hexToRgb(prov.color);
               pdf.setFillColor(ar,ag,ab);
-              pdf.circle(ax + avatarSize/2, ay + avatarSize/2, avatarSize/2, "F");
-              pdf.setTextColor(255,255,255); pdf.setFontSize(avatarSize * 0.35);
-              pdf.text(prov.initials || "", ax + avatarSize/2, ay + avatarSize/2 + avatarSize*0.13, { align: "center" });
+              pdf.circle(acx, acy, cr, "F");
+              pdf.setTextColor(255,255,255); pdf.setFontSize(cr * 0.75);
+              pdf.text(prov.initials || "", acx, acy + cr * 0.28, { align: "center" });
             }
-            // Provider name below avatar
-            const nameY = ay + avatarSize + 4;
+
+            // Extra gap between avatar and name
+            const nameY = ay + avatarSize + 7;
             if (nameY < cy + rowH - 2) {
               pdf.setFont("helvetica","bold"); pdf.setFontSize(6.5);
               pdf.setTextColor(51,51,51);
@@ -1220,7 +1236,8 @@ export function PrintSchedulePage({ onBack }) {
               const words = shortName.split(" ");
               if (words.length > 1 && pdf.getTextWidth(shortName) > colW - 6) {
                 pdf.text(words[0], cx + (colW-2)/2, nameY, { align: "center" });
-                pdf.text(words.slice(1).join(" "), cx + (colW-2)/2, nameY + 7, { align: "center" });
+                if (nameY + 7 < cy + rowH - 2)
+                  pdf.text(words.slice(1).join(" "), cx + (colW-2)/2, nameY + 7, { align: "center" });
               } else {
                 pdf.text(shortName, cx + (colW-2)/2, nameY, { align: "center" });
               }
