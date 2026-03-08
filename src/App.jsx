@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import logoSrc from "./assets/logo.png";
 import { C, ff, ffb, btnS, card, inpS, lblS } from "./data";
 import { supabase } from "./supabase";
 import { fetchCurrentProvider, registerPushSubscription, fetchNotifications, markNotificationsRead } from "./api";
@@ -45,10 +44,12 @@ function LoginPage() {
     <div style={{minHeight:"100vh", background:C.bg, display:"flex", alignItems:"center", justifyContent:"center", fontFamily:ff}}>
       <div style={{width:"100%", maxWidth:430, padding:"0 24px"}}>
         <div style={{display:"flex", justifyContent:"center", padding:"48px 0 24px"}}>
-          <img src={logoSrc} alt="Beaches OBGYN" style={{height:64, objectFit:"contain"}}/>
+          <div style={{width:64, height:64, borderRadius:16, background:C.primary, display:"flex", alignItems:"center", justifyContent:"center"}}>
+            <span style={{color:"#fff", fontFamily:ff, fontWeight:900, fontSize:22}}>CS</span>
+          </div>
         </div>
         <p style={{fontFamily:ff, fontWeight:900, fontSize:24, color:C.text, marginBottom:6, textAlign:"center"}}>Welcome back</p>
-        <p style={{fontFamily:ffb, fontSize:13, color:C.sub, marginBottom:32, textAlign:"center"}}>Sign in to your Beaches OBGYN account</p>
+        <p style={{fontFamily:ffb, fontSize:13, color:C.sub, marginBottom:32, textAlign:"center"}}>Sign in to your Call Scheduler account</p>
         <div style={{marginBottom:16}}>
           <label style={lblS}>Email</label>
           <input style={inpS} type="email" placeholder="you@example.com" value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === "Enter" && handleLogin()}/>
@@ -58,7 +59,7 @@ function LoginPage() {
           <input style={inpS} type="password" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === "Enter" && handleLogin()}/>
         </div>
         {error && <p style={{color:C.coral, fontSize:13, marginBottom:12, fontFamily:ffb}}>{error}</p>}
-        <button style={{...btnS, width:"100%", opacity: loading ? 0.7 : 1}} onClick={handleLogin} disabled={loading}>
+        <button style={{...btnS(), width:"100%", opacity: loading ? 0.7 : 1}} onClick={handleLogin} disabled={loading}>
           {loading ? "Signing in…" : "Sign In"}
         </button>
       </div>
@@ -85,7 +86,9 @@ function SetPasswordPage({ onDone }) {
     <div style={{minHeight:"100vh", background:C.bg, display:"flex", alignItems:"center", justifyContent:"center", fontFamily:ff}}>
       <div style={{width:"100%", maxWidth:430, padding:"0 24px"}}>
         <div style={{display:"flex", justifyContent:"center", padding:"48px 0 24px"}}>
-          <img src={logoSrc} alt="Beaches OBGYN" style={{height:64, objectFit:"contain"}}/>
+          <div style={{width:64, height:64, borderRadius:16, background:C.primary, display:"flex", alignItems:"center", justifyContent:"center"}}>
+            <span style={{color:"#fff", fontFamily:ff, fontWeight:900, fontSize:22}}>CS</span>
+          </div>
         </div>
         <p style={{fontFamily:ff, fontWeight:900, fontSize:24, color:C.text, marginBottom:6, textAlign:"center"}}>Set Your Password</p>
         <p style={{fontFamily:ffb, fontSize:13, color:C.sub, marginBottom:32, textAlign:"center"}}>Choose a password to complete your account setup.</p>
@@ -98,7 +101,7 @@ function SetPasswordPage({ onDone }) {
           <input style={inpS} type="password" placeholder="Re-enter password" value={confirm} onChange={e => setConfirm(e.target.value)}/>
         </div>
         {error && <p style={{color:C.coral, fontSize:13, marginBottom:12, fontFamily:ffb}}>{error}</p>}
-        <button style={{...btnS, width:"100%", opacity: loading ? 0.7 : 1}} onClick={handleSet} disabled={loading}>
+        <button style={{...btnS(), width:"100%", opacity: loading ? 0.7 : 1}} onClick={handleSet} disabled={loading}>
           {loading ? "Saving…" : "Set Password & Continue"}
         </button>
       </div>
@@ -142,7 +145,6 @@ function AppInner() {
       else if (action === "my-requests") { setSub(null); setTab("request"); }
       else if (action === "messages") {
         if (senderId) {
-          // Fetch provider and open messages directly
           const { fetchProviders } = await import("./api");
           const all = await fetchProviders();
           const sender = all.find(p => p.id === senderId);
@@ -222,7 +224,6 @@ function AppInner() {
     else if (action === "home") { setTab("home"); }
     else if (action.startsWith("messages:")) {
       const senderName = action.replace("messages:", "").trim();
-      // Look up the provider by name so we can open MessagesPage with them
       const { fetchProviders } = await import("./api");
       const all = await fetchProviders();
       const sender = all.find(p => p.name === senderName || p.name.includes(senderName));
@@ -230,7 +231,6 @@ function AppInner() {
         setMsgRecip(sender);
         setSub("messages");
       } else {
-        // Fallback: open request tab
         setTab("request");
       }
     }
@@ -253,7 +253,7 @@ function AppInner() {
 
   return (
     <div id="app-root" style={{minHeight:"100vh", background:C.bg, display:"flex", flexDirection:"column", maxWidth:430, margin:"0 auto", fontFamily:ff}}>
-      <Header logoSrc={logoSrc} onNotif={handleBell} onSettings={()=>setSub("settings")} unreadCount={unreadCount}/>
+      <Header logoSrc={null} onNotif={handleBell} onSettings={()=>setSub("settings")} unreadCount={unreadCount}/>
       <div style={{flex:1, padding:"16px 16px 0", overflowY:"auto"}}>
         {renderBody()}
       </div>
@@ -263,8 +263,8 @@ function AppInner() {
           return (
             <button key={key} onClick={() => { setTab(key); setSub(null); }}
               style={{flex:1, border:"none", background:"none", padding:"10px 0 8px", display:"flex", flexDirection:"column", alignItems:"center", gap:3, cursor:"pointer"}}>
-              <Icon color={active ? C.teal : C.sub}/>
-              <span style={{fontFamily:ffb, fontSize:10, color: active ? C.teal : C.sub, fontWeight: active ? 800 : 500}}>{label}</span>
+              <Icon color={active ? C.primary : C.sub}/>
+              <span style={{fontFamily:ffb, fontSize:10, color: active ? C.primary : C.sub, fontWeight: active ? 800 : 500}}>{label}</span>
             </button>
           );
         })}
