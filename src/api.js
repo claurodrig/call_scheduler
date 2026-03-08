@@ -12,7 +12,7 @@ export async function fetchSchedule(year, month) {
   const end = `${year}-${String(month + 1).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
   const { data, error } = await supabase
     .from("call_schedule")
-    .select("date, provider_id, providers(id, name, credentials, color, initials, email, avatar_url)")
+    .select("date, provider_id, providers!call_schedule_provider_id_fkey(id, name, credentials, color, initials, email, avatar_url)")
     .gte("date", start).lte("date", end).order("date");
   if (error) console.error("fetchSchedule:", error);
   const schedule = {};
@@ -23,7 +23,7 @@ export async function fetchSchedule(year, month) {
 export async function fetchRequests(providerId = null) {
   let query = supabase
     .from("requests")
-    .select("*, providers(id, name, initials, color, email, avatar_url)")
+    .select("*, providers!requests_provider_id_fkey(id, name, initials, color, email, avatar_url)")
     .order("created_at", { ascending: false });
   if (providerId) query = query.eq("provider_id", providerId);
   const { data, error } = await query;
@@ -34,7 +34,7 @@ export async function fetchRequests(providerId = null) {
 export async function fetchIncomingSwitchRequests(providerId) {
   const { data, error } = await supabase
     .from("requests")
-    .select("*, providers(id, name, initials, color, email, avatar_url)")
+    .select("*, providers!requests_provider_id_fkey(id, name, initials, color, email, avatar_url)")
     .eq("type", "Call Switch")
     .eq("target_provider_id", providerId)
     .eq("status", "Pending")
@@ -122,7 +122,7 @@ export async function saveGeneratedSchedule(scheduleMap, providers, year, month)
 export async function fetchNoCallDayRequests(providerId = null) {
   let query = supabase
     .from("no_call_day_requests")
-    .select("*, providers(id, name, initials, color, email, avatar_url)")
+    .select("*, providers!no_call_day_requests_provider_id_fkey(id, name, initials, color, email, avatar_url)")
     .order("created_at", { ascending: false });
   if (providerId) query = query.eq("provider_id", providerId);
   const { data, error } = await query;
