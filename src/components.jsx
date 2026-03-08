@@ -2678,9 +2678,9 @@ export function AdminPage({ onBack }) {
       <div style={{display:"flex", background:"#FFF", borderRadius:8, padding:3, marginBottom:16, border:`1px solid ${C.grey}`}}>
         {[
           ["requests", "Requests"],
+          ["schedule", "Schedule"],
           ["nocall",   `No-Call${pendingNoCall > 0 ? ` (${pendingNoCall})` : ""}`],
           ["users",    "Users"],
-          ["schedule", "Schedule"],
         ].map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)} style={{
             flex: 1, padding: "9px 2px", borderRadius: 6, border: "none",
@@ -2714,7 +2714,6 @@ export function AdminPage({ onBack }) {
             )}
           </div>
         ))}
-        <AIScheduleGenerator/>
       </>; })()}
 
       {tab === "nocall" && <>
@@ -2888,7 +2887,7 @@ export function AdminPage({ onBack }) {
         ))}
       </>}
 
-      {tab === "schedule" && <ScheduleAndHistory providers={providers}/>}
+      {tab === "schedule" && <><AIScheduleGenerator/><ScheduleAndHistory providers={providers}/></>}
 
     </div>
   );
